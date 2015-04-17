@@ -67,9 +67,11 @@
 
 #define kSnoop_DHCP_Discover        1
 #define kSnoop_DHCP_Offer           2
-#define kSnoop_DHCP_Request         3   
+#define kSnoop_DHCP_Request         3
+#define kSnoop_DHCP_Decline         4
 #define kSnoop_DHCP_ACK             5
 #define kSnoop_DHCP_Release         7
+#define kSnoop_DHCP_Inform          8
 
 #define kSnoop_DefaultQueue             0
 #define kSnoop_DefaultNumberOfQueues    1
@@ -824,7 +826,8 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     }
 
     // If gSnoopEnable is not set then just send the packet out
-    if (((pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Request) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Discover))
+    if (((pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Request) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Discover) ||
+         (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Decline) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Release) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Inform))
         && gSnoopEnable && (gSnoopCircuitEnabled || gSnoopRemoteEnabled)) {
                                                            
         strcpy(gCircuit_id, gSnoopCircuitIDList[queue_number]);
