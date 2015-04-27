@@ -729,6 +729,7 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
             strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
             strcpy(pNewClient->client.hostname, pHostname);
             pNewClient->client.rssi = 0;
+			pNewClient->client.noOfTriesForOnlineCheck = 0;
 
             list_add(&pNewClient->list, &gSnoop_ClientList.list);
             gSnoopNumberOfClients++;
@@ -1344,6 +1345,7 @@ static bool snoop_IsMacInList(int num_devices, char * pRemote_id)
     return inList;
 }
 
+#define MAX_NUM_TRIES 15
 static void *snoop_mac_handler(void *data)
 { 
     int num_devices;
@@ -1363,10 +1365,18 @@ static void *snoop_mac_handler(void *data)
                 pClient= list_entry(pos, snooper_priv_client_list, list);
 
                 if (snoop_IsMacInList(kSnoop_MaxNumAssociatedDevices, pClient->client.remote_id) == false) {
-
-                    snoop_RemoveClientListEntry(pClient->client.remote_id);
-                    msg_debug("Removed mac: %s from client list\n", pClient->client.remote_id);
-                }
+					pClient->client.noOfTriesForOnlineCheck++;
+					//Since there is a delay in updation of Wifi object AssociatedDevices, there is inconsistency in hot spot client list. 
+					//Checking for mutiple times before removing the client from hot spot client list.
+					if(pClient->client.noOfTriesForOnlineCheck > MAX_NUM_TRIES ) {
+		                snoop_RemoveClientListEntry(pClient->client.remote_id);
+		                msg_debug("Removed mac: %s from client list\n", pClient->client.remote_id);
+					} 
+                } else {
+					//reset the count to Zero.
+					pClient->client.noOfTriesForOnlineCheck = 0;
+				}
+				
             }
 
             snoop_log();
