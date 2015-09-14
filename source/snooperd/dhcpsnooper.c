@@ -51,7 +51,7 @@
 #include<signal.h>
 #include <arpa/inet.h>
 
-#include "dhcp.h"
+#include <dhcp.h>
 #include "debug.h"
 #include "dhcpsnooper.h"
 #include "lm_api.h"

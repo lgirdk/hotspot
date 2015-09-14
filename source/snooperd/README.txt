@@ -21,3 +21,6 @@ iptables -I FORWARD -o br0 -p udp --dport=67 -j NFQUEUE --queue-num 0
 # Remember when capturing packets if you want to see the GRE encapsulation then capture the
 # tunnel interface (e.g. eth0). If you want to capture the inner packet then capture on the
 # GRE device (e.g. gretap).
+
+Needs ISC dhcp
+(https://source.isc.org/cgi-bin/gitweb.cgi?p=dhcp.git;a=summary)  during build for dhcp.h
