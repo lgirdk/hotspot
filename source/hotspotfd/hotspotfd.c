@@ -88,6 +88,7 @@
 
 #define PACKETSIZE  64
 #define kDefault_KeepAliveInterval      60 
+#define kDefault_KeepAliveIntervalFailure      300 
 #define kDefault_KeepAliveThreshold     5
 #define kDefault_KeepAlivePolicy        2
 #define kDefault_KeepAliveCount         1
@@ -108,6 +109,7 @@ struct packet {
 
 unsigned int glog_level             = LOG_NOISE;
 unsigned int gKeepAliveInterval     = kDefault_KeepAliveInterval;
+unsigned int gKeepAliveIntervalFailure     = kDefault_KeepAliveIntervalFailure;
 unsigned int gKeepAliveThreshold    = kDefault_KeepAliveThreshold;
 
 static bool gPrimaryIsActive = true;     // start with primary EP, assume active
@@ -149,6 +151,55 @@ static pthread_mutex_t keep_alive_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool gPriStateIsDown = false;
 static bool gSecStateIsDown = false;
 static bool gBothDnFirstSignal = false;
+
+static bool gTunnelIsUp = false;
+
+#define khotspotfd_Cmd1 "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries"
+
+static bool hotspotfd_isClientAttached(bool *pIsNew)
+{
+    FILE *fp=NULL;
+    char buffer[1024]="";
+    char path[PATH_MAX];
+    char *pch=NULL;
+    int num_devices = 0;
+    int instance;
+	static bool num_devices_0=0;
+
+    for(instance=5; instance<=6; instance++) {
+
+    	sprintf(buffer, khotspotfd_Cmd1, instance); 
+
+    	fp = popen(buffer, "r");
+    	if (fp == NULL) {
+        	num_devices = 0;
+    	} else {
+    
+        	while (fgets(path, PATH_MAX, fp) != NULL) {
+    
+            		pch = strstr(path, "ue:");
+            		if (pch) { 
+                		num_devices = atoi(&pch[4]);
+                		msg_debug("cmd: %s\n", buffer);
+                		msg_debug("num_devices: %d\n", num_devices);
+                		break;
+ 	           	}
+        	}
+	        pclose(fp);
+	    }
+	    if (num_devices>0)
+            break;
+    }
+    if (num_devices>0) {
+		if(pIsNew && num_devices_0==0) 
+			*pIsNew=true;
+		num_devices_0=num_devices;
+		return true;
+	} 
+	num_devices_0=num_devices;
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief hotspotfd_checksum
 ///
@@ -189,7 +240,7 @@ static unsigned short hotspotfd_checksum(void *pdata, int len)
 /// \return - 0 = ping successful, 1 = ping not OK
 /// 
 ////////////////////////////////////////////////////////////////////////////////
-static int hotspotfd_ping(char *address)
+static int _hotspotfd_ping(char *address)
 {
     const int val = 255;
     int i, sd;
@@ -208,7 +259,7 @@ static int hotspotfd_ping(char *address)
     // This is the number of ping's to send out
     // per keep alive interval
     unsigned keepAliveCount = gKeepAliveCount;
-
+printf("------- ping >>\n");
     pid = getpid();
     proto = getprotobyname("ICMP");
     hname = gethostbyname(address);
@@ -318,8 +369,29 @@ static int hotspotfd_ping(char *address)
     if ( sd >= 0 ) {
         close(sd);
     }
-
+printf("------- ping %d << status\n");
     return status;
+}
+
+static int hotspotfd_ping(char *address, bool checkClient) {
+    //zqiu: do not ping WAG if no client attached, and no new client join in
+printf("------------------ %s \n", __func__); 
+    if(checkClient && !hotspotfd_isClientAttached( NULL) )
+        return  STATUS_SUCCESS;
+    return  _hotspotfd_ping(address);
+}
+
+static int hotspotfd_sleep(int sec) {
+	bool isNew=false;	
+	msg_debug("Sleeping for %d seconds...\n", sec);
+    while(sec>0) {
+		hotspotfd_isClientAttached(&isNew);
+		if(isNew) 
+			return sec;
+		sleep(1);
+		sec--;
+    }
+    return sec;
 }
 
 static void hotspotfd_SignalHandler(int signo)
@@ -714,6 +786,9 @@ int main(int argc, char *argv[])
     bool run_in_foreground = false;
     unsigned int keepAliveThreshold = 0;
     unsigned int secondaryKeepAlives = 0;
+	time_t secondaryEndPointstartTime;
+	time_t currentTime ;
+	int timeElapsed;
 
     strcpy(gKeepAliveInterface, "none");
 
@@ -877,7 +952,7 @@ int main(int argc, char *argv[])
                 hotspotfd_log();
             }
 
-            if (hotspotfd_ping(gpPrimaryEP) == STATUS_SUCCESS) {
+            if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
                 gPrimaryIsActive = true;
                 gSecondaryIsActive = false;
                 gPrimaryIsAlive = true;
@@ -899,6 +974,8 @@ int main(int argc, char *argv[])
 
                         msg_err("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP) 
                     }
+					gTunnelIsUp=true;
+					
                     pthread_mutex_lock(&keep_alive_mutex);
                     gbFirstPrimarySignal = false;
                     pthread_mutex_unlock(&keep_alive_mutex);
@@ -908,11 +985,9 @@ int main(int argc, char *argv[])
                 msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
                 msg_debug("Primary GRE Tunnel Endpoint is alive\n");
-                msg_debug("Sleeping for %d seconds...\n", gKeepAliveInterval);
-
-                if (gKeepAliveEnable == false) continue;
-                sleep(gKeepAliveInterval);
-                if (gKeepAliveEnable == false) continue;
+				if (gKeepAliveEnable == false) continue;
+				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
+				if (gKeepAliveEnable == false) continue;
 
             } else {
 
@@ -922,15 +997,18 @@ int main(int argc, char *argv[])
                 pthread_mutex_unlock(&keep_alive_mutex);
 
                 keepAliveThreshold++;
-                if (gKeepAliveEnable == false) continue;
-                sleep(gKeepAliveInterval);
-                if (gKeepAliveEnable == false) continue;
+				if (gKeepAliveEnable == false) continue;
+				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
+				if (gKeepAliveEnable == false) continue;
 
                 if (keepAliveThreshold < gKeepAliveThreshold) {
                     continue;
                 } else {
                     gPrimaryIsActive = false;
                     gSecondaryIsActive = true;
+					//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
+					gbFirstSecondarySignal = true;
+					//fix ends
                     keepAliveThreshold = 0;
                     gPriStateIsDown = true;
 
@@ -946,7 +1024,9 @@ int main(int argc, char *argv[])
 
                             msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
                         }
+						gTunnelIsUp=false;
                     }
+					time(&secondaryEndPointstartTime);
                 }
             }
         }
@@ -959,7 +1039,7 @@ int main(int argc, char *argv[])
                 hotspotfd_log();
             }
 
-            if (hotspotfd_ping(gpSecondaryEP) == STATUS_SUCCESS) {
+            if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
                 gPrimaryIsActive = false;
                 gSecondaryIsActive = true;
                 gSecondaryIsAlive = true;
@@ -971,15 +1051,23 @@ int main(int argc, char *argv[])
 
                 secondaryKeepAlives++;
 
+				time(&currentTime);
+				timeElapsed = difftime(currentTime, secondaryEndPointstartTime);
+
                 if (gKeepAliveLogEnable) {
                     hotspotfd_log();
                 }
 
                 // Check for absolute max. secondary active interval
                 // TODO: If reached tunnel should be swicthed to primary
-                if (secondaryKeepAlives > gSecondaryMaxTime/60) {
+                //if (secondaryKeepAlives > gSecondaryMaxTime/60) {
+
+				if( timeElapsed > gSecondaryMaxTime ) {
 
                     gPrimaryIsActive = true;
+					//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
+					gbFirstPrimarySignal = true;
+					// fix ends
                     gSecondaryIsActive = false;
                     keepAliveThreshold = 0;
                     secondaryKeepAlives = 0;
@@ -1001,7 +1089,8 @@ int main(int argc, char *argv[])
 
                         msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
                     }
-
+					gTunnelIsUp=true;
+					
                     pthread_mutex_lock(&keep_alive_mutex);
                     gbFirstSecondarySignal = false;
                     pthread_mutex_unlock(&keep_alive_mutex);
@@ -1010,10 +1099,9 @@ int main(int argc, char *argv[])
                 msg_debug("Secondary GRE Tunnel Endpoint is alive\n");
                 msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
-                msg_debug("Sleeping for %d seconds....\n", gKeepAliveInterval);
-                if (gKeepAliveEnable == false) continue;
-                sleep(gKeepAliveInterval);
-                if (gKeepAliveEnable == false) continue;
+				if (gKeepAliveEnable == false) continue;
+				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
+				if (gKeepAliveEnable == false) continue;
 
             } else {
                 msg_debug("Secondary GRE Tunnel Endpoint is not alive\n");
@@ -1025,9 +1113,9 @@ int main(int argc, char *argv[])
                 pthread_mutex_unlock(&keep_alive_mutex);
 
                 keepAliveThreshold++;
-                if (gKeepAliveEnable == false) continue;
-                sleep(gKeepAliveInterval);
-                if (gKeepAliveEnable == false) continue;
+				if (gKeepAliveEnable == false) continue;
+				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
+				if (gKeepAliveEnable == false) continue;
 
                 if (keepAliveThreshold < gKeepAliveThreshold) {
                     continue;
@@ -1047,6 +1135,7 @@ int main(int argc, char *argv[])
 
                             msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
                         }
+						gTunnelIsUp=false;
                     }
                 }
             }
