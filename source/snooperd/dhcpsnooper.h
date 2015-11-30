@@ -16,7 +16,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 */
-
 /**********************************************************************
    Copyright [2014] [Cisco Systems, Inc.]
  
@@ -105,6 +104,7 @@ typedef struct
     char dhcp_status[kSnooper_MaxStatusLen];
     char hostname[kSnooper_MaxHostNameLen];
     int rssi;
+	int noOfTriesForOnlineCheck;
 } snooper_client_list;
 
 typedef struct
