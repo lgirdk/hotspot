@@ -16,5 +16,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-#SUBDIRS = arp_solicitation hotspotfd mtu_modifier snooperd
-SUBDIRS = arp_solicitation hotspotfd snooperd
+#                                              -*- Autoconf -*-
+# Process this file with autoconf to produce configure script.
+#
+
+AC_PREREQ([2.65])
+AC_INIT([hotspot], [1.0], [BUG-REPORT-ADDRESS])
+AM_INIT_AUTOMAKE
+LT_INIT
+
+AC_PREFIX_DEFAULT(`pwd`)
+AC_ENABLE_SHARED
+AC_DISABLE_STATIC
+
+AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_MACRO_DIR([m4])
+
+# Checks for programs.
+AC_PROG_CC
+AC_PROG_INSTALL
+AM_PROG_CC_C_O
+AM_PROG_LIBTOOL(libtool)
+
+# Checks for header files.
+AC_CHECK_HEADERS([stdlib.h string.h unistd.h])
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_HEADER_STDBOOL
+AC_C_INLINE
+
+# Checks for library functions.
+AC_FUNC_MALLOC
+
+PKG_CHECK_MODULES([DBUS],[dbus-1 >= 1.6.18])
+
+AC_CONFIG_FILES(
+	source/hotspotfd/Makefile
+	source/arp_solicitation/Makefile
+	source/snooperd/Makefile
+	source/Makefile
+	Makefile
+)
+
+
+AC_OUTPUT
+

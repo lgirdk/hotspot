@@ -16,5 +16,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-#SUBDIRS = arp_solicitation hotspotfd mtu_modifier snooperd
-SUBDIRS = arp_solicitation hotspotfd snooperd
+bin_PROGRAMS = hotspotfd
+
+AM_CFLAGS = -I$(top_srcdir)/source -I$(top_srcdir)/source/include -I$(top_srcdir)/source/util
+
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog
+
+hotspot_SOURCES = hotspotfd.c
+
