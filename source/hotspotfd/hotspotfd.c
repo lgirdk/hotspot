@@ -65,11 +65,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include <sys/mman.h>
-#include <sys/types.h> 
-#include <string.h> 
+#include <sys/types.h>
+#include <string.h>
 #include <sys/shm.h>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
