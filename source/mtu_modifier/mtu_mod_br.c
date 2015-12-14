@@ -413,7 +413,7 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
 
     if(skb->protocol != htons(ETH_P_IP))
         return(NF_ACCEPT);
-    brDev = (struct net_device *)(indev->master);
+    brDev = (struct net_device *)(indev);
     /*if MTU modification is not enabled on this bridge, just return*/
     if(mtu_mod_get_setting(brDev->name, &segFlag, &icmpFlag, mtu,gwIp)){
         return(NF_ACCEPT);
@@ -431,4 +431,3 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
     }
     return(NF_ACCEPT);
 }
-

@@ -41,6 +41,7 @@
 #include <linux/inetdevice.h>
 #include <linux/in.h>
 #include <linux/if_ether.h>
+#include <linux/inet.h>
 #include <asm/uaccess.h>
 
 #ifndef MTU_MODIFIER_FILE_NAME
@@ -132,24 +133,25 @@ static int mtu_mod_write_proc(struct file *file, const char __user *buffer, unsi
 	return(count);
 }
 
+static const struct file_operations mtu_mod_proc_file_fops = {
+ .owner = THIS_MODULE,
+ .write = mtu_mod_write_proc,
+ .read  = mtu_mod_read_proc,
+};
+
 int init_mtu_mod_proc(void)
 {
 	if(mtu_mod_proc_file)
 		return(-1);
 	
 	/* create the /proc file */
-	mtu_mod_proc_file = create_proc_entry(MTU_MODIFIER_FILE_NAME, 0644, init_net.proc_net);
+	mtu_mod_proc_file = proc_create(MTU_MODIFIER_FILE_NAME, 0644, init_net.proc_net, &mtu_mod_proc_file_fops);
 	if (mtu_mod_proc_file == NULL){
 		remove_proc_entry(MTU_MODIFIER_FILE_NAME, NULL);
 		printk(KERN_EMERG "Error: Could not initialize %s\n",MTU_MODIFIER_FILE_NAME);
 		return -ENOMEM;
 	}
-	mtu_mod_proc_file->mode = S_IFREG | S_IRUGO | S_IWUSR;
-	mtu_mod_proc_file->write_proc = (write_proc_t *)mtu_mod_write_proc;
-	mtu_mod_proc_file->read_proc = mtu_mod_read_proc;
-	mtu_mod_proc_file->uid = 0;
-	mtu_mod_proc_file->gid = 0;
-	mtu_mod_proc_file->size = 0;
+
 	return(0);
 }
 
@@ -160,4 +162,3 @@ void deinit_mtu_mod_proc(void)
 		mtu_mod_proc_file = NULL;
 	}
 }
-
