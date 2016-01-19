@@ -97,7 +97,8 @@
 #define kDefault_PrimaryTunnelEP        "172.30.0.1" 
 #define kDefault_SecondaryTunnelEP      "172.40.0.1" 
 
-#define kDefault_SecondaryMaxTime       300 // max. time allowed on secondary EP in secs.
+//#define kDefault_SecondaryMaxTime       300 // max. time allowed on secondary EP in secs.
+#define kDefault_SecondaryMaxTime       43200  //zqiu: according to XWG-CP-15, default time is 12 hours
 
 #define HOTSPOTFD_STATS_PATH    "/var/tmp/hotspotfd.log"
 
@@ -382,16 +383,39 @@ printf("------------------ %s \n", __func__);
     return  _hotspotfd_ping(address);
 }
 
-static int hotspotfd_sleep(int sec) {
+static int hotspotfd_sleep(int sec, bool l_tunnelAlive) {
 	bool isNew=false;	
-	msg_debug("Sleeping for %d seconds...\n", sec);
+	time_t l_sRefTime, l_sNowTime;
+	struct tm * timeinfo;
+	int l_dSeconds;
+	int l_iRefSec;
+	
+	time(&l_sRefTime);
+	timeinfo = localtime(&l_sRefTime);
+	l_iRefSec = sec;
+	
+	msg_debug("Current Time before sleep: %s, sleep for %d secs Tunnel Alive / not:%d\n", asctime(timeinfo), l_iRefSec, l_tunnelAlive);
     while(sec>0) {
-		hotspotfd_isClientAttached(&isNew);
-		if(isNew) 
+		if (l_tunnelAlive)
+		{
+			hotspotfd_isClientAttached(&isNew);
+			if(isNew) 
+				return sec;
+		}
+		sleep(5);
+		sec -= 5;
+		time(&l_sNowTime);
+		l_dSeconds = difftime(l_sNowTime, l_sRefTime);
+		if (l_iRefSec <= l_dSeconds)
+		{
+			timeinfo = localtime(&l_sNowTime);
+			msg_debug("Leaving hotspotfd_sleep at :%s", asctime(timeinfo));
 			return sec;
-		sleep(1);
-		sec--;
+		}
     }
+	time(&l_sNowTime);
+	timeinfo = localtime(&l_sNowTime);
+	msg_debug("Leaving hotspotfd_sleep at :%s", asctime(timeinfo));
     return sec;
 }
 
@@ -944,7 +968,7 @@ int main(int argc, char *argv[])
     keep_it_alive:
 
     while (gKeepAliveEnable == true) {
-
+Try_primary:
         while (gPrimaryIsActive && (gKeepAliveEnable == true)) {
 
             gKeepAlivesSent++;
@@ -987,8 +1011,8 @@ int main(int argc, char *argv[])
                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
                 msg_debug("Primary GRE Tunnel Endpoint is alive\n");
 				if (gKeepAliveEnable == false) continue;
-				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
-				if (gKeepAliveEnable == false) continue;
+				hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), true); //Tunnel Alive case
+                if (gKeepAliveEnable == false) continue;
 
             } else {
 
@@ -998,11 +1022,13 @@ int main(int argc, char *argv[])
                 pthread_mutex_unlock(&keep_alive_mutex);
 
                 keepAliveThreshold++;
-				if (gKeepAliveEnable == false) continue;
-				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
-				if (gKeepAliveEnable == false) continue;
+				//if (gKeepAliveEnable == false) continue;
+				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
+                //if (gKeepAliveEnable == false) continue;
 
                 if (keepAliveThreshold < gKeepAliveThreshold) {
+					if (gKeepAliveEnable == false) continue;
+					hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case				
                     continue;
                 } else {
                     gPrimaryIsActive = false;
@@ -1027,11 +1053,11 @@ int main(int argc, char *argv[])
                         }
 						gTunnelIsUp=false;
                     }
-					time(&secondaryEndPointstartTime);
+                    time(&secondaryEndPointstartTime);  
                 }
             }
         }
-
+Try_secondary:
         while (gSecondaryIsActive && (gKeepAliveEnable == true)) {
 
             gKeepAlivesSent++;
@@ -1101,8 +1127,8 @@ int main(int argc, char *argv[])
                 msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
 				if (gKeepAliveEnable == false) continue;
-				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
-				if (gKeepAliveEnable == false) continue;
+				hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), true); //Tunnel Alive case
+                if (gKeepAliveEnable == false) continue;
 
             } else {
                 msg_debug("Secondary GRE Tunnel Endpoint is not alive\n");
@@ -1114,11 +1140,12 @@ int main(int argc, char *argv[])
                 pthread_mutex_unlock(&keep_alive_mutex);
 
                 keepAliveThreshold++;
-				if (gKeepAliveEnable == false) continue;
-				hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure);				
-				if (gKeepAliveEnable == false) continue;
-
+				//if (gKeepAliveEnable == false) continue;
+				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
+                //if (gKeepAliveEnable == false) continue;
                 if (keepAliveThreshold < gKeepAliveThreshold) {
+					if (gKeepAliveEnable == false) continue;
+					hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                     continue;
                 } else {
                     gPrimaryIsActive = true;
@@ -1137,11 +1164,28 @@ int main(int argc, char *argv[])
                             msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
                         }
 						gTunnelIsUp=false;
+						break;
                     }
                 }
             }
         }
 
+		//gTunnelIsUp==false;
+		while (gKeepAliveEnable == true) {
+			gKeepAlivesSent++;
+			if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
+				gPrimaryIsActive = true;
+                gSecondaryIsActive = false;
+				goto Try_primary;
+			}
+			if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
+				gPrimaryIsActive = false;
+                gSecondaryIsActive = true;
+				goto Try_secondary;
+			}
+			hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure, false);			
+		}
+	
     } 
 
     while (gKeepAliveEnable == false) {

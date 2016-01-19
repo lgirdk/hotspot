@@ -202,6 +202,9 @@ enum agent_relay_mode_t
 };
 static enum agent_relay_mode_t agent_relay_mode = forward_and_replace;
 
+static char g_cHostnameForQueue[kSnoop_MaxCircuitIDs][kSnooper_MaxHostNameLen];
+static char g_cInformIpForQueue[kSnoop_MaxCircuitIDs][INET_ADDRSTRLEN];
+
 #if 0
 static void snoop_setDhcpRelayAgentAddAgentOptions(int aao)
 {
@@ -272,7 +275,7 @@ static void snoop_AddClientListRSSI(int rssi, char *pRemote_id)
     
 }
 
-static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id)
+static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int queue_number)
 {
     snooper_priv_client_list * pNewClient;
     struct list_head * pos, * q;
@@ -293,8 +296,11 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id)
         
         msg_debug("Added to client list:\n");
         msg_debug("hostname: %s\n", pNewClient->client.hostname);
-    } 
-    
+    }
+	else
+	{
+		strcpy(g_cHostnameForQueue[queue_number], pHostname);	
+	}
 }
 
 static void snoop_AddClientListAddress(char *pIpv4_addr, char *pRemote_id, char *pCircuit_id)
@@ -325,7 +331,7 @@ static void snoop_AddClientListAddress(char *pIpv4_addr, char *pRemote_id, char 
     
 }
 
-static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned length) 
+static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number) 
 {
     int is_dhcp = 0, mms;
     unsigned optlen;
@@ -455,7 +461,7 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                 host_str[op[1]] = '\0';
                 
                 log_info("host_str: %s\n", host_str);
-                snoop_AddClientListHostname(host_str, gRemote_id);
+                snoop_AddClientListHostname(host_str, gRemote_id, queue_number);                
             }
 
             if (sp != op) {
@@ -829,6 +835,142 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
     
 }
 
+static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number)
+{
+    int is_dhcp = 0, mms;
+    unsigned optlen;
+    u_int8_t *op = NULL, *nextop = NULL, *sp = NULL, *max = NULL, *end_pad = NULL;
+
+    int circuit_id_len; 
+    int remote_id_len;
+    char addr_str[INET_ADDRSTRLEN];
+    char host_str[kSnooper_MaxHostNameLen];
+
+    max = ((u_int8_t *)packet) + gSnoopDhcpMaxAgentOptionLen;
+
+    /* Commence processing after the cookie. */
+    sp = op = &packet->options[4];
+
+	if (NULL == op)
+	{
+		msg_debug("Bad DHCP packet received, not proceeding further");
+		return length;
+	}
+
+    while (op < max) {
+
+        log_info("*op: %d\n", *op);
+        switch (*op) {
+
+        /* Skip padding... */
+        case DHO_PAD:
+            /* Remember the first pad byte so we can commandeer
+             * padded space.
+             *
+             * XXX: Is this really a good idea?  Sure, we can
+             * seemingly reduce the packet while we're looking,
+             * but if the packet was signed by the client then
+             * this padding is part of the checksum(RFC3118),
+             * and its nonpresence would break authentication.
+             */
+            if (end_pad == NULL)
+                end_pad = sp;
+
+            if (sp != op)
+                *sp++ = *op++;
+            else
+                sp = ++op;
+
+            continue;
+
+            /* If we see a message type, it's a DHCP packet. */
+        case DHO_DHCP_MESSAGE_TYPE:
+            is_dhcp = 1;
+            goto skip;
+            /*
+             * If there's a maximum message size option, we
+             * should pay attention to it
+             */
+        case DHO_DHCP_MAX_MESSAGE_SIZE:
+            mms = ntohs(*(op + 2));
+            if (mms < gSnoopDhcpMaxAgentOptionLen &&
+                mms >= DHCP_MTU_MIN)
+                max = ((u_int8_t *)packet) + mms;
+            goto skip;
+
+            /* Quit immediately if we hit an End option. */
+        case DHO_END:
+            return length;
+
+        case DHO_DHCP_AGENT_OPTIONS:
+			msg_debug("DHCP packet length before option-82 removal is:%d\n", length);
+			int l_iSkipBytes = *(op + 1) + 2;
+			nextop = op + op[1] + 2;
+            if (nextop > max)
+                return(0);
+			
+			op = nextop;
+			while (*op != DHO_END)
+			{
+				memmove(sp, op, op[1] + 2);
+                sp += op[1] + 2;
+                op = op[1] + 2;
+			}
+			*(sp) = DHO_END;
+            length = length - l_iSkipBytes;
+			msg_debug("DHCP packet length after option-82 removal is:%d\n", length);
+			break;			
+
+            skip:
+            /* Skip over other options. */
+        default:
+            /* Fail if processing this option will exceed the
+             * buffer(op[1] is malformed).
+             */
+            nextop = op + op[1] + 2;
+            if (nextop > max)
+                return(0);
+
+            end_pad = NULL;
+
+#ifdef __GET_REQUESTED_IP_ADDRESS__
+            /* Add the request IP address to the client list */
+            if(*op == DHO_DHCP_REQUESTED_ADDRESS) {
+                inet_ntop(AF_INET, &(op[2]), addr_str, INET_ADDRSTRLEN);
+                snoop_AddClientListAddress(addr_str, gRemote_id, gCircuit_id);
+            }
+#endif          
+
+            /* Add the hostname to the client list */
+            if(*op == DHO_HOST_NAME) {
+                memcpy(host_str, &op[2], op[1]); 
+                host_str[op[1]] = '\0';
+                
+                log_info("host_str: %s\n", host_str);                
+                snoop_AddClientListHostname(host_str, gRemote_id, queue_number);
+            }
+
+            if (sp != op) {
+                memmove(sp, op, op[1] + 2);
+                sp += op[1] + 2;
+                op = nextop;
+            } else
+                op = sp = nextop;
+
+            break;
+        }
+    }
+    return(length);
+}
+
+static bool snoop_isValidIpAddress(char *ipAddress)
+{
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+
+    return (result != 0 && sa.sin_addr.s_addr != 0);
+}
+
 static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *msg,struct nfq_data *pkt, void *cbData) 
 {
     uint32_t queue_id;
@@ -840,11 +982,12 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     int len;
     int new_data_len;
     unsigned char * pktData;
-    struct iphdr *iph;
+    struct iphdr *iph = NULL;
     char ipv4_addr[INET_ADDRSTRLEN];
 
     // The iptables queue number is passed when this handler is registered
     // with nfq_create_queue
+	memset(ipv4_addr, 0, INET_ADDRSTRLEN);
     msg_debug("queue_number: %d\n", queue_number);
 
     if ((header = nfq_get_msg_packet_hdr(pkt))) {
@@ -913,12 +1056,7 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
                 pktData[56], pktData[57], pktData[58], pktData[59], pktData[60], pktData[61]); 
         msg_debug("gRemote_id: %s\n", gRemote_id);
 
-        // Get requested IP address at offset 282 (this is might be stale)
-        inet_ntop(AF_INET, &( pktData[282]), ipv4_addr, INET_ADDRSTRLEN);
-
-        snoop_AddClientListEntry(gRemote_id, gCircuit_id, "REQUEST", ipv4_addr, "");
-
-        new_data_len = snoop_addRelayAgentOptions((struct dhcp_packet *)&pktData[kSnoop_DHCP_Options_Start], len);
+        new_data_len = snoop_addRelayAgentOptions((struct dhcp_packet *)&pktData[kSnoop_DHCP_Options_Start], len, queue_number);
 
         // Adjust the IP payload length
 #ifdef __686__
@@ -990,32 +1128,120 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 
         snoop_log();
 
+		if (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Inform) 
+		{
+			inet_ntop(AF_INET, &(pktData[40]), ipv4_addr, INET_ADDRSTRLEN);
+			strcpy(g_cInformIpForQueue[queue_number], ipv4_addr);
+		}
+
+		if( pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Release) 
+		{
+            snoop_RemoveClientListEntry(gRemote_id); //Remote id is already initialized
+        }
         return nfq_set_verdict(myQueue, queue_id, NF_ACCEPT, new_data_len + kSnoop_DHCP_Options_Start, pktData);
 
     } else {
 
-        if( pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Release) {
+        if ( (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Offer) ||
+		 	 (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_ACK))
+		{
+            msg_debug("%s:%d>  DHCP Offer / DHCP Ack:%d received from server \n", __FUNCTION__, __LINE__, pktData[kSnoop_DHCP_Option53_Offset]);
+			new_data_len = snoop_removeRelayAgentOptions((struct dhcp_packet *)&pktData[kSnoop_DHCP_Options_Start], len, queue_number);
 
-            // Copy client MAC address
-            sprintf(gRemote_id, "%02x:%02x:%02x:%02x:%02x:%02x", 
-                    pktData[56], pktData[57], pktData[58], pktData[59], pktData[60], pktData[61]);
 
-            snoop_RemoveClientListEntry(gRemote_id);
+        	// Adjust the IP payload length
+#ifdef __686__
+	        *(uint16_t *)(pktData+2) = bswap_16(new_data_len);
+#else
+	        *(uint16_t *)(pktData+2) = new_data_len;
+#endif
 
-        }
+        	msg_debug("pktData[2]: %02x\n", pktData[2]);
+	        msg_debug("pktData[3]: %02x\n", pktData[3]);
 
-        if( pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_ACK) {
+    	    iph = (struct iphdr *) pktData;
+	        iph->check = snoop_ipChecksum(iph);
 
-            // Copy client MAC address
-            sprintf(gRemote_id, "%02x:%02x:%02x:%02x:%02x:%02x", 
-                    pktData[56], pktData[57], pktData[58], pktData[59], pktData[60], pktData[61]);
+    	    msg_debug("iph->check: %02x\n", bswap_16(iph->check));
+	        msg_debug("iph->ihl: %d\n", iph->ihl);
 
-            // Update requested IP address
-            inet_ntop(AF_INET, &( pktData[44]), ipv4_addr, INET_ADDRSTRLEN);
-            snoop_AddClientListAddress(ipv4_addr, gRemote_id, gCircuit_id);
+    	    // Adjust the UDP payload length
+#ifdef __686__
+	        *(uint16_t *)(pktData+24) = bswap_16(new_data_len - 20);
+#else
+	        *(uint16_t *)(pktData+24) = htons(new_data_len - 20);
+#endif
 
-        }
+    	    msg_debug("pktData[24]: %02x\n", pktData[24]);
+        	msg_debug("pktData[25]: %02x\n", pktData[25]);
 
+#ifndef __CALCULATE_UDP_CHECKSUM__
+	        // Zero the UDP checksum which is optional
+    	    *(uint16_t *)(pktData+26) = 0;
+#else   
+        	{
+            	uint16_t len_udp;
+	            uint16_t * src_addr = (uint16_t *)&iph->saddr;
+    	        uint16_t * dest_addr = (uint16_t *)&iph->daddr;
+        	    uint16_t * buff = (uint16_t *)(pktData+22);
+
+            	checksum = snoop_udpChecksum(new_data_len-20, src_addr, dest_addr, buff);
+	            msg_debug("udp checksum: %04x\n", checksum);
+    	    }
+#endif
+	        msg_debug("pktData[24]: %02x\n", pktData[24]);
+    	    msg_debug("pktData[25]: %02x\n", pktData[25]);
+        	msg_debug("new_data_len: %d\n", new_data_len);
+
+	    	if(gSnoopDebugEnabled) {
+
+    	        j=14;
+        	    printf("00 00 00 00 00 00 00 00  00 00 00 00 00 00 ");
+    
+            	for (i = 0; i < new_data_len; i++) {
+                	printf("%02x ", pktData[i]);
+	                if (j==7) {
+    	                printf(" ");
+        	        }
+    
+            	    j++;
+                	if (j==16) {
+	                    printf("\n");
+    	                j=0;
+        	        }
+             	}
+            	printf("\n");
+       		}
+
+	        msg_debug("Number of captured packets: %d\n", ++gSnoopNumCapturedPackets);
+
+			if( pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_ACK) 
+			{
+				strcpy(gCircuit_id, gSnoopCircuitIDList[queue_number]);
+		        msg_debug("gCircuit_id: %s\n", gCircuit_id);
+       
+		     	// Copy client MAC address
+	            sprintf(gRemote_id, "%02x:%02x:%02x:%02x:%02x:%02x", 
+    	                pktData[56], pktData[57], pktData[58], pktData[59], pktData[60], pktData[61]);
+        		msg_debug("gRemote_id: %s\n", gRemote_id);
+
+				inet_ntop(AF_INET, &(pktData[44]), ipv4_addr, INET_ADDRSTRLEN);
+				char l_cHostName[kSnooper_MaxHostNameLen];
+				if (!snoop_isValidIpAddress(ipv4_addr) && snoop_isValidIpAddress(g_cInformIpForQueue[queue_number]))
+				{
+					strcpy(ipv4_addr,g_cInformIpForQueue[queue_number]);
+					msg_debug("ipaddress in ACK is 0.0.0.0 get it from inform:%s\n", ipv4_addr);					
+					if (!snoop_isValidIpAddress(ipv4_addr))
+						msg_debug("IP Address in DHCP Inform is also not valid something went wrong");
+				}
+				strcpy(l_cHostName, g_cHostnameForQueue[queue_number]);
+				snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName);
+
+        	}
+    	    snoop_log();
+
+        	return nfq_set_verdict(myQueue, queue_id, NF_ACCEPT, new_data_len, pktData);
+		}
         snoop_log();
 
         msg_debug("Number of captured packets: %d\n", ++gSnoopNumCapturedPackets);
