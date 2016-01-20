@@ -417,14 +417,7 @@ build_gre_arp_reply_packet(
     pArpReq += 4;
     DPRINTF("ARP reply: GRE header done!\n");
 
-    /* build inner ether header */
-    pEthhdr = (struct ethhdr *)pArpReq;
-    memcpy(pEthhdr->h_dest, pEthhdr->h_source, ETH_ALEN);
-    memcpy(pEthhdr->h_source, erouter.mac, ETH_ALEN);
-    DPRINTF("ARP reply: inner ether header done!\n");
-
     /* build arp reply */
-    pArpReq += ETHER_HLEN;
     pArp           = (arp_pkt_t *)pArpReq;
     pArp->opcode   = ARPOP_REPLY;
 
@@ -518,7 +511,7 @@ hotspot_arpd_nfqueue_cb(
         DPRINTF("\n");
     }
 
-    if (ret<94){
+    if (ret< 80 ) {
         DPRINTF("NFQUEUE payload format error!\n");
         goto accept;
     }
