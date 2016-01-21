@@ -375,6 +375,35 @@ static int is_gre_arp_request(const unsigned char *arpreq)
     return (gre_proto == htons(ETH_P_ARP)) ? TRUE : FALSE;
 }
 
+static int arp_isValidIpAddress(char *ipAddress)
+{
+    struct sockaddr_in sa;
+    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+
+    return (((result != 0) && (sa.sin_addr.s_addr != 0)) ? TRUE: FALSE);
+}
+
+static int is_a_valid_gre_arp_request(unsigned char* arp_packet)
+{
+    struct iphdr *pIphdr;
+    unsigned char sender_ip[4];
+    unsigned char *pArpReq;
+
+    pIphdr = (struct iphdr *)arp_packet;
+    arp_packet += (pIphdr->ihl << 2) + 8;   /*skip original ip and icmp header*/
+    pArpReq = arp_packet;
+
+    pArpReq += (pIphdr->ihl << 2);
+    DPRINTF("ARP reply: outer ip header done!\n");
+
+    pArpReq += 4;
+    DPRINTF("ARP reply: GRE header done!\n");
+
+    pArpReq += 8;
+    memcpy(sender_ip, &pArpReq[6], IP_ALEN);
+    return (arp_isValidIpAddress(sender_ip));
+}
+
 /*
  * function: build_gre_arp_reply_packet 
  * parameter: 
@@ -521,7 +550,12 @@ hotspot_arpd_nfqueue_cb(
         DPRINTF("NFQUEUE not GRE ARP REQUEST!\n");
         goto accept;
     }
-    
+
+    if (!is_a_valid_gre_arp_request(payload))
+    {
+        DPRINTF("NFQUEUE not a valid GRE ARP REQUEST!\n");
+        goto accept;
+    }
     /*
      * PAYLOAD: icmp ip header + icmp header + GRE ARP REQUEST
      */
