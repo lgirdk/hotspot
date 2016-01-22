@@ -499,7 +499,7 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 			    case discard:
 					return (0);
 			    case forward_and_replace:
-			    	log_debug("Skipping Client relay agent option['%d']\n", *option);
+			    	snooper_dbg("Skipping Client relay agent option['%d']\n", *option);
 			    	break;
 			    default:
 					break;
