@@ -50,6 +50,7 @@
 #include <sys/shm.h>
 #include<signal.h>
 #include <arpa/inet.h>
+#include <limits.h>
 
 #include "dhcp.h"
 #include "debug.h"
