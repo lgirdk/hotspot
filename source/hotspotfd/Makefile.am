@@ -22,5 +22,5 @@ AM_CFLAGS = -I$(top_srcdir)/source -I$(top_srcdir)/source/include -I$(top_srcdir
 
 AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog
 
-hotspot_SOURCES = hotspotfd.c
+hotspotfd_SOURCES = hotspotfd.c
 
