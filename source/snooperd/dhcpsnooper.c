@@ -79,7 +79,7 @@
 
 #define SNOOP_LOG_PATH    "/var/tmp/dhcp_snooperd.log"
 #define kSnoop_max_sysevent_len     80
-#define kSnoop_LM_Delay 1
+#define kSnoop_LM_Delay 10
 
 #define mylist_safe(p, q, h) \
          for (p = (h)->n, q = p->n; p != (h); \
