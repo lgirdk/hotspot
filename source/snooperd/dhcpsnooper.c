@@ -79,7 +79,7 @@
 
 #define SNOOP_LOG_PATH    "/var/tmp/dhcp_snooperd.log"
 #define kSnoop_max_sysevent_len     80
-#define kSnoop_LM_Delay 10
+#define kSnoop_LM_Delay 15
 
 #define mylist_safe(p, q, h) \
          for (p = (h)->n, q = p->n; p != (h); \
@@ -1516,6 +1516,14 @@ static void *snoop_mac_handler(void *data)
 #define kSnooper_Cmd2 "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress"
 #define kSnooper_Cmd3  "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.SignalStrength"
 
+#define READ 0
+#define WRITE 1
+#define CMD_ERR_TIMEOUT 10
+#define READ_ERR -1
+
+pid_t busClientToolPid = NULL;
+int input_fp, output_fp;
+
 static char buffer[128];
 typedef struct {
     char mac[18];
@@ -1524,40 +1532,97 @@ typedef struct {
 
 static snooper_assoc_client_list gclient_data[kSnoop_MaxNumAssociatedDevices];
 
+pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
+{
+	int p_stdin[2], p_stdout[2];
+    pid_t pid;
+    if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
+        return -1;
+    pid = fork();
+    if (pid < 0)
+        return pid;
+    else if (pid == 0)
+    {
+        close(p_stdin[WRITE]);
+        dup2(p_stdin[READ], READ);
+        close(p_stdout[READ]);
+        dup2(p_stdout[WRITE], WRITE);
+        execl("/bin/sh", "sh", "-c", cmd, NULL);
+        perror("execl");
+        exit(1);
+    }
+    if (input_fp == NULL)
+        close(p_stdin[WRITE]);
+    else
+        *input_fp = p_stdin[WRITE];
+    if (output_fp == NULL)
+        close(p_stdout[READ]);
+    else
+        *output_fp = p_stdout[READ];
+
+	msg_debug("popen2 pid for executing the command:%s is:%d\n", cmd, pid);
+    return pid;
+}
+
+void killBus()
+{
+	int status;
+	if(!waitpid(busClientToolPid, &status, WNOHANG))	
+	{
+		msg_err("ccsp_bus_client_tool command is still running kill the process:%d\n", busClientToolPid);
+		if (!kill(busClientToolPid, 0))
+		{
+			msg_debug("Kill is successful!!! \n");
+		}
+		else
+		{
+			msg_debug("Kill is not successful!!! error is:%d\n", errno);			
+		}
+	}
+	else
+	{
+		msg_debug("Waitpid is not successful!!! errno:%d\n", errno);		
+	}
+	close(input_fp); 
+	close(output_fp);
+}
+
 static int snoop_getNumAssociatedDevicesPerSSID(int index)
 {
     FILE *fp;
     char path[PATH_MAX];
     char *pch;
     int num_devices = 0;
+	int rem_sec, read_bytes;
 
     sprintf(buffer, kSnooper_Cmd1, index); 
 
-    fp = popen(buffer, "r");
-    if (fp == NULL) {
-        num_devices = -1;
+	rem_sec = alarm(CMD_ERR_TIMEOUT);
+	busClientToolPid = popen2(buffer, &input_fp, &output_fp);
+	
+	read_bytes = read(output_fp, path, PATH_MAX);
+	if (READ_ERR != read_bytes)
+	{	
+		msg_debug("Read is successful pid to check num_devices is:%d remaining sec:%d bytes read:%d\n", busClientToolPid, rem_sec, read_bytes);
+		pch = strstr(path, "ue:");
+	    if (pch) { 
+   			num_devices = atoi(&pch[4]);
 
-    } else {
-    
-        while (fgets(path, PATH_MAX, fp) != NULL) {
-    
-            pch = strstr(path, "ue:");
-            if (pch) { 
-                num_devices = atoi(&pch[4]);
-
-                if(num_devices > kSnoop_MaxNumAssociatedDevices) {
-                    msg_err("num_devices exceeds max. value\n");
-                    num_devices = kSnoop_MaxNumAssociatedDevices;
-                }
-                msg_debug("cmd: %s\n", buffer);
-                msg_debug("num_devices: %d\n", num_devices);
-
-                break;
-            }
-        }
-    
-        pclose(fp);
-    }
+        	if(num_devices > kSnoop_MaxNumAssociatedDevices) {
+        		msg_err("num_devices exceeds max. value\n");
+	            num_devices = kSnoop_MaxNumAssociatedDevices;
+    	    }
+        	msg_debug("num_devices: %d\n", num_devices);
+	    }
+		rem_sec = alarm(0);
+		msg_debug("Cancelled the alarm for associated devices command remaining secs:%d\n", rem_sec);	
+	}
+	else //read error case -1 is returned
+	{
+		msg_err("Read is un-successful Associated Devices error is:%d\n", errno);		
+	}
+	close(input_fp); 
+	close(output_fp);
 
     return num_devices;
 }
@@ -1570,43 +1635,44 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     char *pch;
     char mac[18];
     int i, j, k = start_index, rssi;
+	int rem_sec, read_bytes;
 
     // Get MAC addresses of associated clients
     for(i=1; i <= num_devices; i++) {
 
         sprintf(buffer, kSnooper_Cmd2, index, i); 
+  
+    	rem_sec = alarm(CMD_ERR_TIMEOUT);
+	    busClientToolPid = popen2(buffer, &input_fp, &output_fp);
     
-        fp = popen(buffer, "r");
-        if (fp == NULL) {
-            status = -1;
+    	read_bytes = read(output_fp, path, PATH_MAX);
+		if (READ_ERR != read_bytes)
+		{	
+			msg_debug("Read is successful pid to check MAC is:%d remaining sec:%d bytes read:%d\n", busClientToolPid, rem_sec, read_bytes);
+	    	pch = strstr(path, "ue:");
+			if (pch) { 
+	    	    mac[17] = '\0';
+            	for(j=0; j<= strlen(mac); j++) {
+	            	 mac[j] = tolower(mac[j]);
+	            }
 
-        } else {
-        
-            while (fgets(path, PATH_MAX, fp) != NULL) {
-        
-                pch = strstr(path, "ue:");
-                if (pch) { 
-        
-                    strncpy(mac, &pch[4], 17);
-                    mac[17] = '\0';
-
-                    for(j=0; j<= strlen(mac); j++) {
-                        mac[j] = tolower(mac[j]);
-                    }
-
-                    msg_debug("mac: %s\n", mac);
-
-                    if(k < kSnoop_MaxNumAssociatedDevices) {
-                        strcpy(gclient_data[k++].mac, mac);
-                    } else {
-                        msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
-                    }
-                    break;
-                }
-            }
-        
-            pclose(fp);
-        }
+    	        msg_debug("mac: %s\n", mac);
+        	    if(k < kSnoop_MaxNumAssociatedDevices) {
+           			strcpy(gclient_data[k++].mac, mac);
+	            } else {
+    	        	msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
+            	}
+        	}
+    		
+			rem_sec = alarm(0);
+			msg_debug("Cancelled the alarm while getting MAC remaining sec:%d\n", rem_sec);	
+		}
+		else //read error case -1 is returned
+		{
+			msg_err("Read is un-successful getting MAC error is:%d\n", errno);		
+		}
+	    close(input_fp); 
+    	close(output_fp);
     }
 
     // Get RSSI level of associated clients
@@ -1615,35 +1681,33 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
 
         sprintf(buffer, kSnooper_Cmd3, index, i); 
 
-        fp = popen(buffer, "r");
-        if (fp == NULL) {
-            status = -1;
+		rem_sec = alarm(CMD_ERR_TIMEOUT);
+        busClientToolPid = popen2(buffer, &input_fp, &output_fp);
 
-        } else {
-
-            while (fgets(path, PATH_MAX, fp) != NULL) {
-
-                pch = strstr(path, "ue:");
-                if (pch) { 
-
-                    rssi = atoi(&pch[4]);
-
-                    msg_debug("rssi: %d\n", rssi);
-
-                    if(k < kSnoop_MaxNumAssociatedDevices) {
-
-                        gclient_data[k++].rssi = rssi;
-                    } else {
-                        msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
-                    }
-                    break;
-                }
-            }
-
-            pclose(fp);
-        }
+        read_bytes = read(output_fp, path, PATH_MAX);
+		if (READ_ERR != read_bytes)
+		{	
+			msg_debug("Read is successful pid to check RSSI is:%d remaining sec:%d bytes read:%d\n", busClientToolPid, rem_sec, read_bytes);
+			pch = strstr(path, "ue:");
+	        if (pch) {
+				rssi = atoi(&pch[4]);
+        	    msg_debug("rssi: %d\n", rssi);
+            	if(k < kSnoop_MaxNumAssociatedDevices) {
+        	    	gclient_data[k++].rssi = rssi;
+	            } else {
+    	        	msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
+        	    }
+        	}
+        	rem_sec = alarm(0);
+			msg_debug("Cancelled the alarm getting RSSI remaining secs:%d\n", rem_sec);	
+		}
+		else //read error case -1 is returned
+		{
+			msg_err("Read is un-successful getting RSSI error is:%d\n", errno);		
+		}
+        close(input_fp);
+        close(output_fp);
     }
-
     return status;
 }
 
@@ -2026,6 +2090,9 @@ int main(int argc, char **argv)
     if (signal(SIGINT, snoop_SignalHandler) == SIG_ERR)
         msg_debug("Failed to catch SIGTERM\n");
     
+	if (signal(SIGALRM, killBus) == SIG_ERR)
+		msg_debug("Failed to catch SIGALM");
+
 #ifdef __HAVE_SYSEVENT__
     if(pthread_create(&lm_tid, NULL, snoop_mac_handler, NULL))
     {
