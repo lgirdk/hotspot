@@ -157,6 +157,67 @@ static bool gBothDnFirstSignal = false;
 static bool gTunnelIsUp = false;
 
 #define khotspotfd_Cmd1 "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries"
+#define READ 0
+#define WRITE 1
+#define CMD_ERR_TIMEOUT 10
+#define READ_ERR -1
+
+int input_fp, output_fp;
+pid_t busClientToolPid = NULL;
+
+static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
+{
+    int p_stdin[2], p_stdout[2];
+    pid_t pid; 
+    if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
+        return -1;
+    pid = fork();
+    if (pid < 0) 
+        return pid; 
+    else if (pid == 0)
+    {    
+        close(p_stdin[WRITE]);
+        dup2(p_stdin[READ], READ);
+        close(p_stdout[READ]);
+        dup2(p_stdout[WRITE], WRITE);
+        execl("/bin/sh", "sh", "-c", cmd, NULL);
+        perror("execl");
+        exit(1);
+    }    
+    if (input_fp == NULL)
+        close(p_stdin[WRITE]);
+    else 
+        *input_fp = p_stdin[WRITE];
+    if (output_fp == NULL)
+        close(p_stdout[READ]);
+    else 
+        *output_fp = p_stdout[READ];
+
+	msg_debug("popen2 pid for executing the command:%s is:%d\n", cmd, pid);
+    return pid;
+}
+
+static void killBus()
+{
+    int status;
+    if(!waitpid(busClientToolPid, &status, WNOHANG))
+    {
+        if (!kill(busClientToolPid, 0))
+        {
+            msg_debug("kill is successful!!! \n");
+        }
+        else
+        {
+            msg_debug("kill is not successful!!! error is:%d\n", errno);
+        }
+    }
+    else
+    {
+        msg_debug("waitpid is not successful!!! errno:%d\n", errno);
+    }
+    close(input_fp);
+    close(output_fp);
+}
 
 static bool hotspotfd_isClientAttached(bool *pIsNew)
 {
@@ -166,32 +227,38 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
     char *pch=NULL;
     int num_devices = 0;
     int instance;
-	static bool num_devices_0=0;
+    static bool num_devices_0=0;
+    int rem_sec, read_bytes;
 
-    for(instance=5; instance<=6; instance++) {
+    for(instance=5; instance<=6; instance++) 
+	{
+		sprintf(buffer, khotspotfd_Cmd1, instance);
 
-    	sprintf(buffer, khotspotfd_Cmd1, instance); 
-
-    	fp = popen(buffer, "r");
-    	if (fp == NULL) {
-        	num_devices = 0;
-    	} else {
+        rem_sec = alarm(CMD_ERR_TIMEOUT);
+        busClientToolPid = popen2(buffer, &input_fp, &output_fp);
+        read_bytes = read(output_fp, path, PATH_MAX);
     
-        	while (fgets(path, PATH_MAX, fp) != NULL) {
-    
-            		pch = strstr(path, "ue:");
-            		if (pch) { 
-                		num_devices = atoi(&pch[4]);
-                		msg_debug("cmd: %s\n", buffer);
-                		msg_debug("num_devices: %d\n", num_devices);
-                		break;
- 	           	}
-        	}
-	        pclose(fp);
+        if (READ_ERR != read_bytes)
+        {    
+            msg_debug("Read is successful pid to check num_devices is:%d remaining sec:%d bytes read:%d\n", busClientToolPid, rem_sec, read_bytes);
+            pch = strstr(path, "ue:");
+            if (pch) {
+                num_devices = atoi(&pch[4]);
+                msg_debug("cmd: %s\n", buffer);
+                msg_debug("num_devices: %d\n", num_devices);
+                break;
+            }
+            rem_sec = alarm(0);
+            msg_debug("Cancelled the alarm in hotspotfd remaining secs:%d\n", rem_sec);
+        }
+        else //read error case -1 is returned
+        {    
+            msg_err("Read is un-successful hotspotfd error is:%d\n", errno);
 	    }
-	    if (num_devices>0)
-            break;
+        close(input_fp);
+        close(output_fp);
     }
+
     if (num_devices>0) {
 		if(pIsNew && num_devices_0==0) 
 			*pIsNew=true;
@@ -962,6 +1029,9 @@ int main(int argc, char *argv[])
 
     if (signal(SIGKILL, hotspotfd_SignalHandler) == SIG_ERR)
         msg_debug("Failed to catch SIGTERM\n");
+
+    if (signal(SIGALRM, killBus) == SIG_ERR)
+        msg_debug("Failed to catch SIGALRM\n");
 
     hotspotfd_log();
 
