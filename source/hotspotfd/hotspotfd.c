@@ -246,7 +246,6 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
                 num_devices = atoi(&pch[4]);
                 msg_debug("cmd: %s\n", buffer);
                 msg_debug("num_devices: %d\n", num_devices);
-                break;
             }
             rem_sec = alarm(0);
             msg_debug("Cancelled the alarm in hotspotfd remaining secs:%d\n", rem_sec);
@@ -255,9 +254,11 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
         {    
             msg_err("Read is un-successful hotspotfd error is:%d\n", errno);
 	    }
-        close(input_fp);
-        close(output_fp);
+        if (num_devices > 0)
+            break;
     }
+    close(input_fp);
+    close(output_fp);
 
     if (num_devices>0) {
 		if(pIsNew && num_devices_0==0) 
