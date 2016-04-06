@@ -1532,10 +1532,28 @@ typedef struct {
 
 static snooper_assoc_client_list gclient_data[kSnoop_MaxNumAssociatedDevices];
 
-pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
+
+void killChild(pid_t childPid)
+{
+    if (!kill(childPid, 0))
+        {
+            msg_debug("Kill is successful!!! \n");
+        }
+        else
+        {
+            msg_debug("Kill is not successful!!! error is:%d\n", errno);
+        }
+        close(input_fp);
+    close(output_fp);
+
+}
+
+static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
 {
 	int p_stdin[2], p_stdout[2];
-    pid_t pid;
+	int exit_status, i;
+
+    pid_t pid, endID;
     if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
         return -1;
     pid = fork();
@@ -1543,7 +1561,7 @@ pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
         return pid;
     else if (pid == 0)
     {
-        close(p_stdin[WRITE]);
+		close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
         dup2(p_stdout[WRITE], WRITE);
@@ -1560,7 +1578,35 @@ pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
     else
         *output_fp = p_stdout[READ];
 
-	msg_debug("popen2 pid for executing the command:%s is:%d\n", cmd, pid);
+	//waitpid(pid, &exit_status, 0);
+	for(i = 0; i < 10; i++) {
+           endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
+           if (endID == -1) {            /* error calling waitpid       */
+              perror("waitpid error");
+			  break;	
+              //exit(EXIT_FAILURE);
+           }
+           else if (endID == 0) {        /* child still running         */
+              //time(&when);
+              printf("Parent waiting for child\n");
+              sleep(1);
+           }
+           else if (endID == pid) {  /* child ended                 */
+              if (WIFEXITED(exit_status))
+                 printf("Child ended normally.n");
+              else if (WIFSIGNALED(exit_status))
+                 printf("Child ended because of an uncaught signal.n");
+              else if (WIFSTOPPED(exit_status))
+                 printf("Child process has stopped.n");
+              break;
+
+           }
+        }
+	if (endID == 0)
+	{
+		killChild(pid);
+	}	
+	msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
     return pid;
 }
 
@@ -1597,7 +1643,7 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
 
     sprintf(buffer, kSnooper_Cmd1, index); 
 
-	rem_sec = alarm(CMD_ERR_TIMEOUT);
+	//rem_sec = alarm(CMD_ERR_TIMEOUT);
 	busClientToolPid = popen2(buffer, &input_fp, &output_fp);
 	
 	read_bytes = read(output_fp, path, PATH_MAX);
@@ -1614,7 +1660,7 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
     	    }
         	msg_debug("num_devices: %d\n", num_devices);
 	    }
-		rem_sec = alarm(0);
+		//rem_sec = alarm(0);
 		msg_debug("Cancelled the alarm for associated devices command remaining secs:%d\n", rem_sec);	
 	}
 	else //read error case -1 is returned
@@ -1642,7 +1688,7 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
 
         sprintf(buffer, kSnooper_Cmd2, index, i); 
   
-    	rem_sec = alarm(CMD_ERR_TIMEOUT);
+    	//rem_sec = alarm(CMD_ERR_TIMEOUT);
 	    busClientToolPid = popen2(buffer, &input_fp, &output_fp);
     
     	read_bytes = read(output_fp, path, PATH_MAX);
@@ -1664,7 +1710,7 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
             	}
         	}
     		
-			rem_sec = alarm(0);
+			//rem_sec = alarm(0);
 			msg_debug("Cancelled the alarm while getting MAC remaining sec:%d\n", rem_sec);	
 		}
 		else //read error case -1 is returned
@@ -1681,7 +1727,7 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
 
         sprintf(buffer, kSnooper_Cmd3, index, i); 
 
-		rem_sec = alarm(CMD_ERR_TIMEOUT);
+		//rem_sec = alarm(CMD_ERR_TIMEOUT);
         busClientToolPid = popen2(buffer, &input_fp, &output_fp);
 
         read_bytes = read(output_fp, path, PATH_MAX);
@@ -1698,7 +1744,7 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     	        	msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
         	    }
         	}
-        	rem_sec = alarm(0);
+        	//rem_sec = alarm(0);
 			msg_debug("Cancelled the alarm getting RSSI remaining secs:%d\n", rem_sec);	
 		}
 		else //read error case -1 is returned
@@ -1766,6 +1812,9 @@ static void *snoop_mac_handler(void *data)
 
         if (gSnoopEnable) {
 
+			/*This loop is to update the associated devices list. If there are no devices connected to hotspot
+            we can avoid running of this loop*/
+            if(gSnoopNumberOfClients > 0) { 
             // Get the total number of associated devices
             // on all public SSID's
             num_devices = snoop_getAllAssociatedDevicesData();
@@ -1791,6 +1840,7 @@ static void *snoop_mac_handler(void *data)
 
             snoop_log();
             msg_debug("sleeping %d secs.\n", kSnoop_LM_Delay);
+		}	
             sleep(kSnoop_LM_Delay);
         }
     }

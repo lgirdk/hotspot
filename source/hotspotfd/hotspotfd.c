@@ -165,10 +165,27 @@ static bool gTunnelIsUp = false;
 int input_fp, output_fp;
 pid_t busClientToolPid = NULL;
 
+void killChild(pid_t childPid)
+{
+    if (!kill(childPid, 0))
+        {
+            msg_debug("Kill is successful!!! \n");
+        }
+        else
+        {
+            msg_debug("Kill is not successful!!! error is:%d\n", errno);
+        }
+        close(input_fp);
+    close(output_fp);
+
+}
+
 static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
 {
     int p_stdin[2], p_stdout[2];
-    pid_t pid; 
+    int exit_status, i;
+
+    pid_t pid, endID;
     if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
         return -1;
     pid = fork();
@@ -183,17 +200,45 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
         execl("/bin/sh", "sh", "-c", cmd, NULL);
         perror("execl");
         exit(1);
-    }    
+    }
     if (input_fp == NULL)
         close(p_stdin[WRITE]);
-    else 
+    else
         *input_fp = p_stdin[WRITE];
     if (output_fp == NULL)
         close(p_stdout[READ]);
-    else 
+    else
         *output_fp = p_stdout[READ];
 
-	msg_debug("popen2 pid for executing the command:%s is:%d\n", cmd, pid);
+    //waitpid(pid, &exit_status, 0);
+    for(i = 0; i < 10; i++) 
+	{
+    	endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
+        if (endID == -1) {            /* error calling waitpid       */
+        	perror("waitpid error");
+            break;
+            //exit(EXIT_FAILURE);
+        }
+        else if (endID == 0) {        /* child still running         */
+        	//time(&when);
+            printf("Parent waiting for child\n");
+            sleep(1);
+        }
+        else if (endID == pid) {  /* child ended                 */
+        	if (WIFEXITED(exit_status))
+            	printf("Child ended normally.n");
+            else if (WIFSIGNALED(exit_status))
+				printf("Child ended because of an uncaught signal.n");
+            else if (WIFSTOPPED(exit_status))
+                printf("Child process has stopped.n");
+            break;
+        }
+    }
+    if (endID == 0)
+    {
+        killChild(pid);
+    }
+    msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
     return pid;
 }
 
@@ -234,7 +279,7 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
 	{
 		sprintf(buffer, khotspotfd_Cmd1, instance);
 
-        rem_sec = alarm(CMD_ERR_TIMEOUT);
+        //rem_sec = alarm(CMD_ERR_TIMEOUT);
         busClientToolPid = popen2(buffer, &input_fp, &output_fp);
         read_bytes = read(output_fp, path, PATH_MAX);
     
@@ -247,7 +292,7 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
                 msg_debug("cmd: %s\n", buffer);
                 msg_debug("num_devices: %d\n", num_devices);
             }
-            rem_sec = alarm(0);
+            //rem_sec = alarm(0);
             msg_debug("Cancelled the alarm in hotspotfd remaining secs:%d\n", rem_sec);
         }
         else //read error case -1 is returned
