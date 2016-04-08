@@ -65,6 +65,10 @@
 #include <sysevent/sysevent.h>
 #endif
 
+#ifndef PATH_MAX
+#define PATH_MAX 1024
+#endif
+
 #define kSnooper_events                     "snooper-update"
 
 #define kSnooper_enable                     "snooper-enable"
