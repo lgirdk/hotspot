@@ -64,6 +64,10 @@
 
 #include <stdbool.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 1024
+#endif
+
 #define kMax_IPAddressLength            40
 
 #define kHotspotfd_events                   "hotspotfd-update"
