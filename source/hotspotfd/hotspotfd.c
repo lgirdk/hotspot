@@ -1079,6 +1079,7 @@ int main(int argc, char *argv[])
     if (signal(SIGALRM, killBus) == SIG_ERR)
         msg_debug("Failed to catch SIGALRM\n");
 
+    system("touch /tmp/hotspotfd_up");
     hotspotfd_log();
 
     keep_it_alive:

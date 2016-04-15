@@ -2147,6 +2147,7 @@ int main(int argc, char **argv)
     }
 #endif
 
+    system("touch /tmp/dhcp_snooperd_up");
     snoop_log();
 
     while ((res = recv(fd, buf, sizeof(buf), 0)) && res >= 0) {
