@@ -241,7 +241,8 @@ int main (int argc, char *argv[])
 
     if (hotspot_arpd_init() < 0)
         goto exit;
-    
+   
+    system("touch /tmp/hotspot_arpd_up"); 
     hotspot_arpd_nfqueue_handler((void*)&g_nfqueue);
     
 cleanup:
