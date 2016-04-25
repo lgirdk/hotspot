@@ -20,7 +20,7 @@ bin_PROGRAMS = dhcp_snooperd
 
 AM_CFLAGS = -I$(top_srcdir)/source -I$(top_srcdir)/source/include -I$(top_srcdir)/source/util
 
-AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common
 
 dhcp_snooperd_SOURCES = dhcpsnooper.c
 

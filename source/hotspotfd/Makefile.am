@@ -20,7 +20,7 @@ bin_PROGRAMS = hotspotfd
 
 AM_CFLAGS = -I$(top_srcdir)/source -I$(top_srcdir)/source/include -I$(top_srcdir)/source/util
 
-AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -lccsp_common
 
 hotspotfd_SOURCES = hotspotfd.c
 

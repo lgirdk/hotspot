@@ -56,6 +56,7 @@
 #include "debug.h"
 #include "dhcpsnooper.h"
 #include "lm_api.h"
+#include "ccsp_trace.h"
 
 #define kSnoop_LOG_ERR     1
 #define kSnoop_LOG_INFO    2
@@ -94,6 +95,7 @@
 #define mylist_entry(p, t, m) \
          cof(p, t, m)
 
+#define DEBUG_INI_NAME "/etc/debug.ini"
 struct mylist_head {
     struct mylist_head *n, *p;
 };
@@ -246,8 +248,7 @@ static void snoop_SignalHandler(int signo)
     snooper_priv_client_list * pNewClient;
     struct mylist_head *pos, *q;
 
-    msg_debug("Received signal: %d\n", signo);
-    msg_debug("Closing sysevent and shared memory\n");
+	CcspTraceWarning(("Received signal: %d Closing sysevent and shared memory\n", signo));
 
 #ifdef __HAVE_SYSEVENT__
     sysevent_close(sysevent_fd, sysevent_token);
@@ -722,8 +723,7 @@ static void snoop_log(void)
     logOut = fopen(SNOOP_LOG_PATH, "w");
 
     if(!logOut) {
-        msg_err("Could not open log file\n");
-        
+        CcspTraceError(("Could not open dhcp_snooperd.log file\n"));
     } else {
     
         fprintf(logOut, "gSnoopEnable: %d\n", gSnoopEnable);
@@ -865,8 +865,7 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
             msg_debug("gSnoopNumberOfClients: %d\n", gSnoopNumberOfClients);
 
         } else {
-
-            msg_debug("Max. number of clients %d already in list\n", gSnoopNumberOfClients);
+            CcspTraceError(("Max. number of clients %d already in list\n", gSnoopNumberOfClients));
         }
     } else {
         msg_debug("Client %s already in list.\n", pRemote_id);
@@ -892,7 +891,7 @@ static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned le
 
 	if (NULL == op)
 	{
-		msg_debug("Bad DHCP packet received, not proceeding further");
+		CcspTraceError(("Bad DHCP packet received, not proceeding further"));
 		return length;
 	}
 
@@ -1271,9 +1270,11 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 				if (!snoop_isValidIpAddress(ipv4_addr) && snoop_isValidIpAddress(g_cInformIpForQueue[queue_number]))
 				{
 					strcpy(ipv4_addr,g_cInformIpForQueue[queue_number]);
-					msg_debug("ipaddress in ACK is 0.0.0.0 get it from inform:%s\n", ipv4_addr);					
+					CcspTraceWarning(("ipaddress in DHCP ACK is 0.0.0.0 get it from inform:%s\n", ipv4_addr));					
 					if (!snoop_isValidIpAddress(ipv4_addr))
-						msg_debug("IP Address in DHCP Inform is also not valid something went wrong");
+					{
+						CcspTraceWarning(("IP Address in DHCP Inform is also not valid something went wrong"));
+					}
 				}
 				strcpy(l_cHostName, g_cHostnameForQueue[queue_number]);
 				snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName);
@@ -1333,7 +1334,7 @@ static void *snoop_sysevent_handler(void *data)
         err = sysevent_getnotification(sysevent_fd, sysevent_token, name, &namelen,  val, &vallen, &getnotification_id);
 
         if (err) {
-            msg_err("err: %d\n", err);
+            CcspTraceError(("Error during sysevent get err: %d\n", err));
         } else {
 
             if (strcmp(name, kSnooper_enable)==0) {
@@ -1536,11 +1537,11 @@ void killChild(pid_t childPid)
 {
     if (!kill(childPid, 0))
     {
-        msg_debug("Kill is successful!!! \n");
+        CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
     }
     else
     {
-        msg_debug("Kill is not successful!!! error is:%d\n", errno);
+        CcspTraceInfo(("Kill is not successful!!! error is:%d\n", errno));
     }
     close(input_fp);
     close(output_fp);
@@ -1611,7 +1612,7 @@ void killBus()
 	int status;
 	if(!waitpid(busClientToolPid, &status, WNOHANG))	
 	{
-		msg_err("ccsp_bus_client_tool command is still running kill the process:%d\n", busClientToolPid);
+		CcspTraceError(("ccsp_bus_client_tool command is still running kill the process:%d\n", busClientToolPid));
 		if (!kill(busClientToolPid, 0))
 		{
 			msg_debug("Kill is successful!!! \n");
@@ -1649,7 +1650,7 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
    			num_devices = atoi(&pch[4]);
 
         	if(num_devices > kSnoop_MaxNumAssociatedDevices) {
-        		msg_err("num_devices exceeds max. value\n");
+        		CcspTraceError(("num_devices :%d exceeds max. value:%d\n", num_devices, kSnoop_MaxNumAssociatedDevices));
 	            num_devices = kSnoop_MaxNumAssociatedDevices;
     	    }
         	msg_debug("num_devices: %d\n", num_devices);
@@ -1657,7 +1658,7 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
 	}
 	else //read error case -1 is returned
 	{
-		msg_err("Read is un-successful Associated Devices error is:%d\n", errno);		
+		CcspTraceError(("Read is un-successful Associated Devices error is:%d\n", errno));		
 	}
 	close(input_fp); 
 	close(output_fp);
@@ -1698,13 +1699,13 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
         	    if(k < kSnoop_MaxNumAssociatedDevices) {
            			strcpy(gclient_data[k++].mac, mac);
 	            } else {
-    	        	msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
+    	        	CcspTraceError(("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices));
             	}
         	}
 		}
 		else //read error case -1 is returned
 		{
-			msg_err("Read is un-successful getting MAC error is:%d\n", errno);		
+			CcspTraceError(("Read is un-successful getting MAC error is:%d\n", errno));		
 		}
 	    close(input_fp); 
     	close(output_fp);
@@ -1728,13 +1729,13 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
             	if(k < kSnoop_MaxNumAssociatedDevices) {
         	    	gclient_data[k++].rssi = rssi;
 	            } else {
-    	        	msg_err("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices);
+    	        	CcspTraceError(("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices));
         	    }
         	}
 		}
 		else //read error case -1 is returned
 		{
-			msg_err("Read is un-successful getting RSSI error is:%d\n", errno);		
+			CcspTraceError(("Read is un-successful getting RSSI error is:%d\n", errno));		
 		}
         close(input_fp);
         close(output_fp);
@@ -1846,7 +1847,7 @@ static int snoop_getStartupParameters(void)
         if((status = sysevent_get(sysevent_fd, sysevent_token, gSnoopSyseventCircuitIDs[i], 
                                   gSnoopCircuitIDList[i], kSnoop_MaxCircuitLen))) {
 
-            msg_err("sysevent_get failed to get %s: %d\n", gSnoopSyseventCircuitIDs[i], status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", gSnoopSyseventCircuitIDs[i], status)); 
             status = STATUS_FAILURE;
             break;
 
@@ -1863,7 +1864,7 @@ static int snoop_getStartupParameters(void)
         if((status = sysevent_get(sysevent_fd, sysevent_token, gSnoopSyseventSSIDs[i], 
                                   gSnoopSSIDList[i], kSnoop_MaxCircuitLen))) {
 
-            msg_err("sysevent_get failed to get %s: %d\n", gSnoopSyseventSSIDs[i], status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", gSnoopSyseventSSIDs[i], status)); 
             status = STATUS_FAILURE;
             break;
 
@@ -1883,7 +1884,7 @@ static int snoop_getStartupParameters(void)
         if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_circuit_enable, 
                                   buf, kSnoop_max_sysevent_len))) {
         
-            msg_err("sysevent_get failed to get %s: %d\n", kSnooper_circuit_enable, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_circuit_enable, status)); 
             status = STATUS_FAILURE;
         } else {
 
@@ -1897,7 +1898,7 @@ static int snoop_getStartupParameters(void)
         if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_remote_enable, 
                                   buf, kSnoop_max_sysevent_len))) {
 
-            msg_err("sysevent_get failed to get %s: %d\n", kSnooper_remote_enable, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_remote_enable, status)); 
             status = STATUS_FAILURE;
         } else {
 
@@ -1911,7 +1912,7 @@ static int snoop_getStartupParameters(void)
         if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_max_clients, 
                                   buf, kSnoop_max_sysevent_len))) {
 
-            msg_err("sysevent_get failed to get %s: %d\n", kSnooper_max_clients, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_max_clients, status)); 
             gSnoopMaxNumberOfClients = kSnoop_DefaultMaxNumberOfClients;
             status = STATUS_FAILURE;
         } else {
@@ -1934,7 +1935,7 @@ static int snoop_setupSharedMemory(void)
     do {
         // Create shared memory segment to get link state
         if ((gShm_fd = shmget(kSnooper_Statistics, kSnooper_SharedMemSize, IPC_CREAT | 0666)) < 0) {
-            msg_err("shmget failed\n"); 
+            CcspTraceError(("shmget failed while setting up shared memory\n")); 
 
             perror("shmget");
             status = STATUS_FAILURE;
@@ -1943,7 +1944,7 @@ static int snoop_setupSharedMemory(void)
 
         // Attach the segment to our data space.
         if ((gpStats = (snooper_statistics_s *)shmat(gShm_fd, NULL, 0)) == (snooper_statistics_s *) -1) {
-            msg_err("shmat failed\n"); 
+            CcspTraceError(("shmat failed whiler setting up shared memory\n")); 
 
             perror("shmat");
 
@@ -1973,6 +1974,9 @@ int main(int argc, char **argv)
     int fd, res, i, j=0;
     char buf[4096];
 
+    rdk_logger_init(DEBUG_INI_NAME);
+	pComponentName = "dhcp_snooperd";
+
     while ((cmd = getopt(argc, argv, "e:d:q:n:f::h::")) != -1) {
         switch (cmd) {
         case 'q':
@@ -1992,8 +1996,7 @@ int main(int argc, char **argv)
             gSnoopNumberOfQueues = atoi(optarg);
 
             if((gSnoopNumberOfQueues > kSnoop_MaxNumberOfQueues) || (gSnoopNumberOfQueues < 1)) {
-
-                msg_err("Invalid number of queues\n");
+                CcspTraceError(("Invalid number of queues dhcp_snooperd bring up aborted:%d\n", gSnoopNumberOfQueues));
                 exit(1);
             }
 
@@ -2025,7 +2028,7 @@ int main(int argc, char **argv)
 
         case 'h':
         default:
-            printf("Unrecognized option '%c'.\n", cmd);
+            CcspTraceError(("Unrecognized option '%c' dhcp_snooperd bring up aborted.\n", cmd));
             snoop_usage();
         }
     }
@@ -2038,7 +2041,7 @@ int main(int argc, char **argv)
         msg_debug("Running in background\n");
 
         if (daemon(0,0) < 0) {
-            msg_debug("Failed to daemonize: %s\n", strerror(errno));
+            CcspTraceError(("Failed to daemonize dhcp_snooperd: %s\n", strerror(errno)));
         }
 
     } else {
@@ -2052,32 +2055,32 @@ int main(int argc, char **argv)
     {
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
         if(snoop_getStartupParameters() != STATUS_SUCCESS) {
-            msg_err("Could not get sysevent startup parameters\n");
+            CcspTraceError(("Could not get sysevent startup parameters\n"));
             snoop_SignalHandler(0);
         }
 #endif
         pthread_create(&sysevent_tid, NULL, snoop_sysevent_handler, NULL);
     } else {
-        msg_err("sysevent_open failed\n");
+        CcspTraceError(("sysevent_open failed\n"));
         exit(1);
     }
 #endif
 
     // Get a queue connection handle
     if (!(nfqHandle = nfq_open())) {
-        msg_err("Error in nfq_open()\n");
+        CcspTraceError(("Error in nfq_open()\n"));
         exit(1);
     }
 
     // Unbind the handler from processing any IP packets
     if ((status = nfq_unbind_pf(nfqHandle, AF_INET)) < 0) {
-        msg_err("Error in nfq_unbind_pf(): %d\n", status);
+        CcspTraceError(("Error in nfq_unbind_pf(): %d\n", status));
         exit(1);
     }
 
     // Bind this handler to process IP packets
     if ((status = nfq_bind_pf(nfqHandle, AF_INET)) < 0) {
-        msg_err("Error in nfq_bind_pf(): %d\n", status);
+        CcspTraceError(("Error in nfq_bind_pf(): %d\n", status));
         exit(1);
     }
 
@@ -2092,7 +2095,7 @@ int main(int argc, char **argv)
         // Install a callback on each of the iptables NFQUEUE queues
         if (!(myQueue = nfq_create_queue(nfqHandle,  i, &snoop_packetHandler, &gPriv_data[j++]))) {
     
-            msg_err("Error in nfq_create_queue(): %p\n", myQueue);
+            CcspTraceError(("Error in nfq_create_queue(): %p\n", myQueue));
             exit(1);
         } else {
             msg_debug("Registered packet handler for queue %d\n", i);
@@ -2100,7 +2103,7 @@ int main(int argc, char **argv)
             // Turn on packet copy mode
             if ((status = nfq_set_mode(myQueue, NFQNL_COPY_PACKET, 0xffff)) < 0) {
 
-                msg_err("Error in nfq_set_mode(): %d\n", status);
+                CcspTraceError(("Error in nfq_set_mode(): %d\n", status));
                 exit(1);
             }
         }
@@ -2115,7 +2118,7 @@ int main(int argc, char **argv)
     strcpy(gRemote_id, kSnoop_DefaultRemoteID); 
 
     if(snoop_setupSharedMemory() != STATUS_SUCCESS) {
-        msg_err("Could not setup shared memory\n");
+        CcspTraceError(("Error while setting shared memory\n"));
         exit(1);
     }
 
@@ -2131,7 +2134,7 @@ int main(int argc, char **argv)
 #ifdef __HAVE_SYSEVENT__
     if(pthread_create(&lm_tid, NULL, snoop_mac_handler, NULL))
     {
-        msg_err("Call to pthread_create lm_tid failed\n");
+        CcspTraceError(("Call to pthread_create lm_tid failed\n"));
         exit(1);
     }
     {
@@ -2146,8 +2149,9 @@ int main(int argc, char **argv)
         pthread_setschedprio(lm_tid, min_prio_for_policy);
     }
 #endif
-
-    system("touch /tmp/dhcp_snooperd_up");
+	
+	CcspTraceInfo(("dhcp_snooperd process is up\n"));
+	system("touch /tmp/dhcp_snooperd_up");
     snoop_log();
 
     while ((res = recv(fd, buf, sizeof(buf), 0)) && res >= 0) {
