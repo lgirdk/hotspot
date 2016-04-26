@@ -86,6 +86,7 @@
 
 #include "debug.h"
 #include "hotspotfd.h"
+#include "ccsp_trace.h"
 
 #define PACKETSIZE  64
 #define kDefault_KeepAliveInterval      60 
@@ -103,6 +104,7 @@
 #define HOTSPOTFD_STATS_PATH    "/var/tmp/hotspotfd.log"
 
 #define kMax_InterfaceLength            20
+#define DEBUG_INI_NAME "/etc/debug.ini"
 
 struct packet {
     struct icmphdr hdr;
@@ -169,11 +171,11 @@ void killChild(pid_t childPid)
 {
     if (!kill(childPid, 0))
         {
-            msg_debug("Kill is successful!!! \n");
+            CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
         }
         else
         {
-            msg_debug("Kill is not successful!!! error is:%d\n", errno);
+            CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
         }
         close(input_fp);
     close(output_fp);
@@ -210,17 +212,14 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
     else
         *output_fp = p_stdout[READ];
 
-    //waitpid(pid, &exit_status, 0);
     for(i = 0; i < 10; i++) 
 	{
     	endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
         if (endID == -1) {            /* error calling waitpid       */
         	perror("waitpid error");
             break;
-            //exit(EXIT_FAILURE);
         }
         else if (endID == 0) {        /* child still running         */
-        	//time(&when);
             printf("Parent waiting for child\n");
             sleep(1);
         }
@@ -236,6 +235,7 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
     }
     if (endID == 0)
     {
+		CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
         killChild(pid);
     }
     msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
@@ -273,31 +273,28 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
     int num_devices = 0;
     int instance;
     static bool num_devices_0=0;
-    int rem_sec, read_bytes;
+    int read_bytes;
 
     for(instance=5; instance<=6; instance++) 
 	{
 		sprintf(buffer, khotspotfd_Cmd1, instance);
 
-        //rem_sec = alarm(CMD_ERR_TIMEOUT);
         busClientToolPid = popen2(buffer, &input_fp, &output_fp);
         read_bytes = read(output_fp, path, PATH_MAX);
     
         if (READ_ERR != read_bytes)
         {    
-            msg_debug("Read is successful pid to check num_devices is:%d remaining sec:%d bytes read:%d\n", busClientToolPid, rem_sec, read_bytes);
+            msg_debug("Read is successful while checking number of devices bytes read:%d\n", read_bytes);
             pch = strstr(path, "ue:");
             if (pch) {
                 num_devices = atoi(&pch[4]);
                 msg_debug("cmd: %s\n", buffer);
                 msg_debug("num_devices: %d\n", num_devices);
             }
-            //rem_sec = alarm(0);
-            msg_debug("Cancelled the alarm in hotspotfd remaining secs:%d\n", rem_sec);
         }
         else //read error case -1 is returned
         {    
-            msg_err("Read is un-successful hotspotfd error is:%d\n", errno);
+			CcspTraceError(("Read is un-successful hotspotfd error is:%d\n", errno));
 	    }
         if (num_devices > 0)
             break;
@@ -370,6 +367,7 @@ static int _hotspotfd_ping(char *address)
     int status = STATUS_FAILURE;
     struct ifreq ifr;
     unsigned netaddr;
+    static int l_iPingCount;
 
     // This is the number of ping's to send out
     // per keep alive interval
@@ -424,6 +422,14 @@ printf("------- ping >>\n");
             status = STATUS_FAILURE;
             break;
         }
+
+        if (l_iPingCount == 15)		
+		{
+			CcspTraceInfo(("Sending ICMP ping to:%s\n", address));
+			l_iPingCount = 0;
+		}
+		else
+			l_iPingCount++;
 
         for (loop = 0;loop < 10; loop++) {
             socklen_t len = sizeof(r_addr); 
@@ -507,6 +513,11 @@ static int hotspotfd_sleep(int sec, bool l_tunnelAlive) {
 	timeinfo = localtime(&l_sRefTime);
 	l_iRefSec = sec;
 	
+	if(sec == gKeepAliveIntervalFailure)
+	{
+		CcspTraceInfo(("GRE Tunnel is down sleep for:%d sec\n", gKeepAliveIntervalFailure));
+	}	
+
 	msg_debug("Current Time before sleep: %s, sleep for %d secs Tunnel Alive / not:%d\n", asctime(timeinfo), l_iRefSec, l_tunnelAlive);
     while(sec>0) {
 		if (l_tunnelAlive)
@@ -703,8 +714,12 @@ static void *hotspotfd_sysevent_handler(void *data)
                 msg_debug("Received %s sysevent\n", khotspotfd_enable);
                 msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
 
-                gKeepAliveEnable = atoi(val);
-
+                if (atoi(val) == 0) {
+                    gKeepAliveEnable = false;
+                    CcspTraceError(("Keep alive enable is false, ICMP ping wont be sent\n"));
+                } else {
+                    gKeepAliveEnable = true;
+                }
                 msg_debug("gKeepAliveEnable: %u\n", gKeepAliveEnable);
 
             } else if (strcmp(name, khotspotfd_keep_alive_count)==0) {
@@ -747,7 +762,7 @@ static int hotspotfd_setupSharedMemory(void)
     do {
         // Create shared memory segment to get link state
         if ((gShm_fd = shmget(kKeepAlive_Statistics, kKeepAlive_SharedMemSize, IPC_CREAT | 0666)) < 0) {
-            msg_err("shmget failed\n"); 
+            CcspTraceError(("shmget failed while setting up shared memory\n")); 
 
             perror("shmget");
             status = STATUS_FAILURE;
@@ -756,7 +771,7 @@ static int hotspotfd_setupSharedMemory(void)
 
         // Attach the segment to our data space.
         if ((gpStats = (hotspotfd_statistics_s *)shmat(gShm_fd, NULL, 0)) == (hotspotfd_statistics_s *) -1) {
-            msg_err("shmat failed\n"); 
+            CcspTraceError(("shmat failed while setting up shared memory\n")); 
 
             perror("shmat");
 
@@ -778,7 +793,7 @@ static int hotspotfd_getStartupParameters(void)
     do {
         // Primary EP 
         if ((status = sysevent_get(sysevent_fd, sysevent_token, kHotspotfd_primary, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", kHotspotfd_primary, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", kHotspotfd_primary, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -788,7 +803,7 @@ static int hotspotfd_getStartupParameters(void)
 
             msg_debug("Loaded sysevent %s with %s\n", kHotspotfd_primary, gpPrimaryEP); 
         } else {
-            msg_err("hotspotfd_isValidIpAddress: %s: %d\n", kHotspotfd_primary, status);
+            CcspTraceError(("hotspotfd_isValidIpAddress: %s: %d\n", kHotspotfd_primary, status));
 
             status = STATUS_FAILURE;
             break;
@@ -796,7 +811,7 @@ static int hotspotfd_getStartupParameters(void)
 
         // Secondary EP
         if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_secondary, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", khotspotfd_secondary, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_secondary, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -807,7 +822,7 @@ static int hotspotfd_getStartupParameters(void)
             msg_debug("Loaded sysevent %s with %s\n", khotspotfd_secondary, gpSecondaryEP); 
         } else {
 
-            msg_err("hotspotfd_isValidIpAddress: %s: %d\n", khotspotfd_secondary, status);
+            CcspTraceError(("hotspotfd_isValidIpAddress: %s: %d\n", khotspotfd_secondary, status));
 
             status = STATUS_FAILURE;
             break;
@@ -815,7 +830,7 @@ static int hotspotfd_getStartupParameters(void)
 
         // Keep Alive Interval
         if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -825,14 +840,14 @@ static int hotspotfd_getStartupParameters(void)
             msg_debug("Loaded sysevent %s with %d\n", khotspotfd_keep_alive, gKeepAliveInterval); 
         } else {
 
-            msg_err("Invalid gKeepAliveInterval: %d\n", gKeepAliveInterval); 
+            CcspTraceError(("Invalid gKeepAliveInterval: %d\n", gKeepAliveInterval)); 
             status = STATUS_FAILURE;
             break;
         }
 
         // Keep Alive Threshold
         if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive_threshold, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_threshold, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_threshold, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -843,14 +858,14 @@ static int hotspotfd_getStartupParameters(void)
 
         } else {
 
-            msg_err("Invalid gKeepAliveThreshold: %d\n", gKeepAliveThreshold); 
+            CcspTraceError(("Invalid gKeepAliveThreshold: %d\n", gKeepAliveThreshold)); 
             status = STATUS_FAILURE;
             break;
         }
 
         // Keep alive Max. Secondary
         if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_max_secondary, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", khotspotfd_max_secondary, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_max_secondary, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -861,14 +876,14 @@ static int hotspotfd_getStartupParameters(void)
 
         } else {
 
-            msg_err("Invalid gSecondaryMaxTime: %d\n", gSecondaryMaxTime); 
+            CcspTraceError(("Invalid gSecondaryMaxTime: %d\n", gSecondaryMaxTime)); 
             status = STATUS_FAILURE;
             break;
         }
 
         // Keep Alive Policy
         if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive_policy, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_policy, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_policy, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -879,14 +894,14 @@ static int hotspotfd_getStartupParameters(void)
 
         } else {
 
-            msg_err("Invalid gKeepAlivePolicy: %d\n", gKeepAlivePolicy); 
+            CcspTraceError(("Invalid gKeepAlivePolicy: %d\n", gKeepAlivePolicy)); 
             status = STATUS_FAILURE;
             break;
         }
 
         // Keep Alive Count
         if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive_count, buf, sizeof(buf)))) {
-            msg_err("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_count, status); 
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_count, status)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -897,7 +912,7 @@ static int hotspotfd_getStartupParameters(void)
 
         } else {
 
-            msg_err("Invalid gKeepAliveCount: %d\n", gKeepAliveCount); 
+            CcspTraceError(("Invalid gKeepAliveCount: %d\n", gKeepAliveCount)); 
             status = STATUS_FAILURE;
             break;
         }
@@ -928,6 +943,9 @@ int main(int argc, char *argv[])
 	time_t currentTime ;
 	int timeElapsed;
 
+	rdk_logger_init(DEBUG_INI_NAME);
+   	pComponentName = "hotspotfd";
+
     strcpy(gKeepAliveInterface, "none");
 
     while ((cmd = getopt(argc, argv, "e:p:s:i:t:m:l:n:f::h::")) != -1) {
@@ -938,7 +956,7 @@ int main(int argc, char *argv[])
                 strcpy(gKeepAliveInterface, optarg);
             } else {
 
-                printf("Invalid network interface\n");
+				CcspTraceError(("Invalid network interface not bringing hotspotfd up\n"));
                 exit(0);
             }
 
@@ -947,6 +965,7 @@ int main(int argc, char *argv[])
 
             if (atoi(optarg) == 0) {
                 gKeepAliveEnable = false;
+                CcspTraceError(("Keep alive enable is false, ICMP ping wont be sent\n"));
             } else {
                 gKeepAliveEnable = true;
             }
@@ -972,8 +991,7 @@ int main(int argc, char *argv[])
                 if ((strlen(optarg) < kMax_IPAddressLength) && strchr(optarg, '.')) {
                     strcpy(gpPrimaryEP, optarg);
                 } else {
-
-                    printf("Invalid Primary IP Address\n");
+				    CcspTraceError(("Invalid Primary IP Address provided not bringing hotspotfd up\n"));
                     exit(0);
                 }
             }
@@ -989,8 +1007,7 @@ int main(int argc, char *argv[])
                 if ((strlen(optarg) < kMax_IPAddressLength) && strchr(optarg, '.')) {
                     strcpy(gpSecondaryEP, optarg);
                 } else {
-
-                    printf("Invalid Secondary IP Address\n");
+				    CcspTraceError(("Invalid Secondary IP Address provided not bringing hotspotfd up\n"));
                     exit(0);
                 }
             }
@@ -1035,7 +1052,7 @@ int main(int argc, char *argv[])
         msg_debug("Running in background\n");
 
         if (daemon(0,0) < 0) {
-            msg_debug("Failed to daemonize: %s\n", strerror(errno));
+            CcspTraceWarning(("Failed to daemonize hotspotfd: %s\n", strerror(errno)));
         }
 
     } else {
@@ -1049,7 +1066,7 @@ int main(int argc, char *argv[])
     if (sysevent_fd >= 0) {
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
         if (hotspotfd_getStartupParameters() != STATUS_SUCCESS) {
-            msg_err("Could not get sysevent startup parameters\n");
+            CcspTraceError(("Error while getting startup parameters\n"));
 
             hotspotfd_SignalHandler(0);
 
@@ -1057,13 +1074,13 @@ int main(int argc, char *argv[])
 #endif
         pthread_create(&sysevent_tid, NULL, hotspotfd_sysevent_handler, NULL);
     } else {
-        msg_err("sysevent_open failed\n");
+		CcspTraceError(("sysevent_open has failed hotspotfd bring up aborted\n"));
         exit(1);
     }
 #endif
 
     if (hotspotfd_setupSharedMemory() != STATUS_SUCCESS) {
-        msg_err("Could not setup shared memory\n");
+		CcspTraceError(("Could not setup shared memory hotspotfd bring up aborted\n"));
         exit(1);
     }
 
@@ -1079,6 +1096,7 @@ int main(int argc, char *argv[])
     if (signal(SIGALRM, killBus) == SIG_ERR)
         msg_debug("Failed to catch SIGALRM\n");
 
+    CcspTraceInfo(("Hotspotfd process is up\n"));
     system("touch /tmp/hotspotfd_up");
     hotspotfd_log();
 
@@ -1109,12 +1127,12 @@ Try_primary:
                 }
 
                 if (gbFirstPrimarySignal) {
-                    msg_debug("Create Primary GRE tunnel\n");
+					CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));				
 
                     if (sysevent_set(sysevent_fd, sysevent_token, 
                                      kHotspotfd_tunnelEP, gpPrimaryEP, 0)) {
 
-                        msg_err("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP) 
+                        CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
                     }
 					gTunnelIsUp=true;
 					
@@ -1126,7 +1144,6 @@ Try_primary:
                 msg_debug("Primary GRE Tunnel Endpoint is alive\n");
                 msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
-                msg_debug("Primary GRE Tunnel Endpoint is alive\n");
 				if (gKeepAliveEnable == false) continue;
 				hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), true); //Tunnel Alive case
                 if (gKeepAliveEnable == false) continue;
@@ -1156,8 +1173,7 @@ Try_primary:
                     keepAliveThreshold = 0;
                     gPriStateIsDown = true;
 
-                    msg_debug("Primary GRE Tunnel Endpoint is not alive\n");
-                    msg_debug("Switching Secondary Endpoint...\n");
+					CcspTraceInfo(("Primary GRE Tunnel Endpoint :%s is not alive Switching to Secondary Endpoint :%s\n", gpPrimaryEP,gpSecondaryEP));
 
                     if (gSecStateIsDown && gPriStateIsDown && gBothDnFirstSignal) {
 
@@ -1166,7 +1182,7 @@ Try_primary:
                         if (sysevent_set(sysevent_fd, sysevent_token, 
                                          kHotspotfd_tunnelEP, "\0", 0)) {
 
-                            msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
+                            CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
 						gTunnelIsUp=false;
                     }
@@ -1215,7 +1231,7 @@ Try_secondary:
                     gSecondaryIsActive = false;
                     keepAliveThreshold = 0;
                     secondaryKeepAlives = 0;
-                    msg_debug("Max. Secondary EP time exceeded. Switching to Primary EP\n");
+					CcspTraceInfo(("Max. Secondary EP time:%d exceeded. Switching to Primary EP\n", gSecondaryMaxTime));
 
                     // TODO: Do we just destroy this tunnel and move over
                     // to the primary? What if the Primary is down then we switched
@@ -1226,12 +1242,12 @@ Try_secondary:
                 }
 
                 if (gbFirstSecondarySignal) {
-                    msg_debug("Create Secondary GRE tunnel\n");
+					CcspTraceInfo(("Create Secondary GRE tunnel with endpoint:%s\n", gpSecondaryEP));
 
                     if (sysevent_set(sysevent_fd, sysevent_token, 
                                      kHotspotfd_tunnelEP, gpSecondaryEP, 0)) {
 
-                        msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
+                        CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
 					gTunnelIsUp=true;
 					
@@ -1248,8 +1264,7 @@ Try_secondary:
                 if (gKeepAliveEnable == false) continue;
 
             } else {
-                msg_debug("Secondary GRE Tunnel Endpoint is not alive\n");
-
+				CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive%s\n", gpSecondaryEP));	
                 gSecondaryIsAlive = false;
 
                 pthread_mutex_lock(&keep_alive_mutex);
@@ -1278,7 +1293,7 @@ Try_secondary:
                         if (sysevent_set(sysevent_fd, sysevent_token, 
                                          kHotspotfd_tunnelEP, "\0", 0)) {
 
-                            msg_err("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP) 
+                            CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
 						gTunnelIsUp=false;
 						break;
@@ -1302,7 +1317,6 @@ Try_secondary:
 			}
 			hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure, false);			
 		}
-	
     } 
 
     while (gKeepAliveEnable == false) {
