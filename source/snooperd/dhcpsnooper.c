@@ -1520,9 +1520,7 @@ static void *snoop_mac_handler(void *data)
 #define READ 0
 #define WRITE 1
 #define READ_ERR -1
-
-pid_t busClientToolPid = NULL;
-int input_fp, output_fp;
+#define CLOSE_ERR -1
 
 static char buffer[128];
 typedef struct {
@@ -1532,25 +1530,29 @@ typedef struct {
 
 static snooper_assoc_client_list gclient_data[kSnoop_MaxNumAssociatedDevices];
 
+void sigquit()
+{
+    CcspTraceError(("Inside sigquit terminating child now\n"));
+    _exit(1);
+}
 
 void killChild(pid_t childPid)
 {
-    if (!kill(childPid, 0))
+    if (!kill(childPid, SIGQUIT))
     {
         CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
     }
     else
     {
-        CcspTraceInfo(("Kill is not successful!!! error is:%d\n", errno));
+        CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
     }
-    close(input_fp);
-    close(output_fp);
 }
 
-static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
+static pid_t popen2(const char *cmd, int *output_fp)
 {
-	int p_stdin[2], p_stdout[2];
-	int exit_status, i;
+    int p_stdin[2], p_stdout[2];
+    int exit_status, i, l_icloseStatus;
+    bool l_bCloseFp = false;
 
     pid_t pid, endID;
     if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
@@ -1560,18 +1562,24 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
         return pid;
     else if (pid == 0)
     {
-		close(p_stdin[WRITE]);
+        signal(SIGQUIT, sigquit);
+        close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
         dup2(p_stdout[WRITE], WRITE);
+
+        close(p_stdout[WRITE]);
+        close(p_stdin[READ]);
+
         execl("/bin/sh", "sh", "-c", cmd, NULL);
         perror("execl");
-        exit(1);
+        _exit(1);
     }
-    if (input_fp == NULL)
-        close(p_stdin[WRITE]);
-    else
-        *input_fp = p_stdin[WRITE];
+
+    close(p_stdin[READ]);
+    close(p_stdout[WRITE]);
+    close(p_stdin[WRITE]);
+
     if (output_fp == NULL)
         close(p_stdout[READ]);
     else
@@ -1582,52 +1590,55 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
         endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
         if (endID == -1) {            /* error calling waitpid       */
             perror("waitpid error");
-			break;	
+            CcspTraceInfo(("waitPid Error\n"));
+            l_bCloseFp = true;
+            break;
         }
         else if (endID == 0) {        /* child still running         */
-            printf("Parent waiting for child\n");
+            msg_debug("Parent waiting for child\n");
             sleep(1);
         }
         else if (endID == pid) {  /* child ended                 */
             if (WIFEXITED(exit_status))
-                printf("Child ended normally.n");
+            { 
+                msg_debug("Child ended normally \n");
+            }
             else if (WIFSIGNALED(exit_status))
-                printf("Child ended because of an uncaught signal.n");
+            {
+                CcspTraceInfo(("Child ended because of an uncaught signal \n", exit_status));
+                l_bCloseFp = true;
+			}
             else if (WIFSTOPPED(exit_status))
-                printf("Child process has stopped.n");
+            {
+                CcspTraceInfo(("Child process has stopped \n", exit_status));
+                l_bCloseFp = true;
+            }
             break;
-
         }
     }
-	if (endID == 0)
-	{
-		killChild(pid);
-	}	
-	msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
-    return pid;
-}
+    if (0 == endID)
+    {
+        CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
+        signal(SIGCHLD, SIG_IGN);
 
-void killBus()
-{
-	int status;
-	if(!waitpid(busClientToolPid, &status, WNOHANG))	
-	{
-		CcspTraceError(("ccsp_bus_client_tool command is still running kill the process:%d\n", busClientToolPid));
-		if (!kill(busClientToolPid, 0))
-		{
-			msg_debug("Kill is successful!!! \n");
-		}
-		else
-		{
-			msg_debug("Kill is not successful!!! error is:%d\n", errno);			
-		}
-	}
-	else
-	{
-		msg_debug("Waitpid is not successful!!! errno:%d\n", errno);		
-	}
-	close(input_fp); 
-	close(output_fp);
+        killChild(pid);
+
+        l_icloseStatus = close(*output_fp);
+        if (CLOSE_ERR == l_icloseStatus)
+            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
+
+        return NULL;
+    }
+    if (true == l_bCloseFp)
+    {
+        l_icloseStatus = close(*output_fp);
+        if (CLOSE_ERR == l_icloseStatus)
+            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
+
+        return NULL;
+    }
+    msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
+    return pid;
 }
 
 static int snoop_getNumAssociatedDevicesPerSSID(int index)
@@ -1635,13 +1646,17 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
     FILE *fp;
     char path[PATH_MAX];
     char *pch;
-	int read_bytes, num_devices = 0;
+	int read_bytes, num_devices = 0, l_iOutputfp;
+	pid_t l_busClientPid;
 
+    memset(path, 0x00, sizeof(path));
     sprintf(buffer, kSnooper_Cmd1, index); 
-
-	busClientToolPid = popen2(buffer, &input_fp, &output_fp);
+	l_busClientPid = popen2(buffer, &l_iOutputfp);
 	
-	read_bytes = read(output_fp, path, PATH_MAX);
+	if(NULL == l_busClientPid)
+		return num_devices;	
+
+	read_bytes = read(l_iOutputfp, path, (PATH_MAX-1));
 	if (READ_ERR != read_bytes)
 	{	
 		msg_debug("Read is successful while getting number of devices bytes read:%d\n", read_bytes);
@@ -1656,13 +1671,16 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
         	msg_debug("num_devices: %d\n", num_devices);
 	    }
 	}
+    else if (0 == read_bytes)
+    {
+        CcspTraceError(("EOF detected while reading number of devices\n"));
+		return num_devices;
+    }
 	else //read error case -1 is returned
 	{
 		CcspTraceError(("Read is un-successful Associated Devices error is:%d\n", errno));		
 	}
-	close(input_fp); 
-	close(output_fp);
-
+	close(l_iOutputfp);
     return num_devices;
 }
 
@@ -1674,16 +1692,19 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     char *pch;
     char mac[18];
     int i, j, k = start_index, rssi;
-	int read_bytes;
+	int read_bytes, l_outputfp, l_icloseStatus;
+    pid_t l_busClientPid;
 
+    memset(path, 0x00, sizeof(path));
     // Get MAC addresses of associated clients
     for(i=1; i <= num_devices; i++) {
 
         sprintf(buffer, kSnooper_Cmd2, index, i); 
-  
-	    busClientToolPid = popen2(buffer, &input_fp, &output_fp);
-    
-    	read_bytes = read(output_fp, path, PATH_MAX);
+	    l_busClientPid = popen2(buffer, &l_outputfp);
+		if (NULL == l_busClientPid)
+            continue;
+ 
+    	read_bytes = read(l_outputfp, path, (PATH_MAX-1));
 		if (READ_ERR != read_bytes)
 		{	
 			msg_debug("Read is successful while getting MAC bytes read:%d\n", read_bytes);
@@ -1703,12 +1724,16 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
             	}
         	}
 		}
+        else if (0 == read_bytes)
+        {
+            CcspTraceError(("EOF detected while getting MAC address of the connected device\n"));
+		    continue;
+        }
 		else //read error case -1 is returned
 		{
 			CcspTraceError(("Read is un-successful getting MAC error is:%d\n", errno));		
 		}
-	    close(input_fp); 
-    	close(output_fp);
+    	close(l_outputfp);
     }
 
     // Get RSSI level of associated clients
@@ -1716,9 +1741,11 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     for(i=1; i <= num_devices; i++) {
 
         sprintf(buffer, kSnooper_Cmd3, index, i); 
-        busClientToolPid = popen2(buffer, &input_fp, &output_fp);
+        l_busClientPid = popen2(buffer, &l_outputfp);
+		if (NULL == l_busClientPid)
+            continue;
 
-        read_bytes = read(output_fp, path, PATH_MAX);
+        read_bytes = read(l_outputfp, path, (PATH_MAX-1));
 		if (READ_ERR != read_bytes)
 		{	
 			msg_debug("Read is successful while getting RSSI bytes read:%d\n", read_bytes);
@@ -1733,12 +1760,16 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
         	    }
         	}
 		}
+        else if (0 == read_bytes)
+        {
+            CcspTraceError(("EOF detected while getting RSSI of the connected device\n"));
+		    continue;
+        }
 		else //read error case -1 is returned
 		{
 			CcspTraceError(("Read is un-successful getting RSSI error is:%d\n", errno));		
 		}
-        close(input_fp);
-        close(output_fp);
+        close(l_outputfp);
     }
     return status;
 }
@@ -2128,9 +2159,6 @@ int main(int argc, char **argv)
     if (signal(SIGINT, snoop_SignalHandler) == SIG_ERR)
         msg_debug("Failed to catch SIGTERM\n");
     
-	if (signal(SIGALRM, killBus) == SIG_ERR)
-		msg_debug("Failed to catch SIGALM");
-
 #ifdef __HAVE_SYSEVENT__
     if(pthread_create(&lm_tid, NULL, snoop_mac_handler, NULL))
     {

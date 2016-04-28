@@ -163,29 +163,31 @@ static bool gTunnelIsUp = false;
 #define WRITE 1
 #define CMD_ERR_TIMEOUT 10
 #define READ_ERR -1
+#define CLOSE_ERR -1
 
-int input_fp, output_fp;
-pid_t busClientToolPid = NULL;
+void sigquit()
+{
+	CcspTraceError(("Inside sigquit terminating child now\n"));
+	_exit(1);
+}
 
 void killChild(pid_t childPid)
 {
-    if (!kill(childPid, 0))
-        {
-            CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
-        }
-        else
-        {
-            CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
-        }
-        close(input_fp);
-    close(output_fp);
-
+    if (!kill(childPid, SIGQUIT))
+    {
+    	CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
+    }
+    else
+    {
+    	CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
+    }
 }
 
-static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
+static pid_t popen2(const char *cmd, int *output_fp)
 {
     int p_stdin[2], p_stdout[2];
-    int exit_status, i;
+    int exit_status, i, l_icloseStatus;
+    bool l_bCloseFp = false;
 
     pid_t pid, endID;
     if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
@@ -194,19 +196,25 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
     if (pid < 0) 
         return pid; 
     else if (pid == 0)
-    {    
+    {   
+		signal(SIGQUIT, sigquit); 
         close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
         dup2(p_stdout[WRITE], WRITE);
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
+
+		close(p_stdout[WRITE]);
+		close(p_stdin[READ]);
+
+		execl("/bin/sh", "sh", "-c", cmd, NULL);
         perror("execl");
-        exit(1);
+        _exit(1);
     }
-    if (input_fp == NULL)
-        close(p_stdin[WRITE]);
-    else
-        *input_fp = p_stdin[WRITE];
+
+	close(p_stdin[READ]);
+	close(p_stdout[WRITE]);
+    close(p_stdin[WRITE]);
+
     if (output_fp == NULL)
         close(p_stdout[READ]);
     else
@@ -216,7 +224,8 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
 	{
     	endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
         if (endID == -1) {            /* error calling waitpid       */
-        	perror("waitpid error");
+        	CcspTraceInfo(("waitPid Error\n"));
+			l_bCloseFp = true;
             break;
         }
         else if (endID == 0) {        /* child still running         */
@@ -225,43 +234,45 @@ static pid_t popen2(const char *cmd, int *input_fp, int *output_fp)
         }
         else if (endID == pid) {  /* child ended                 */
         	if (WIFEXITED(exit_status))
-            	printf("Child ended normally.n");
+			{
+            	msg_debug("Child ended normally \n");
+			}	
             else if (WIFSIGNALED(exit_status))
-				printf("Child ended because of an uncaught signal.n");
+			{
+				CcspTraceInfo(("Child ended because of an uncaught signal \n", exit_status));
+                l_bCloseFp = true;
+			}
             else if (WIFSTOPPED(exit_status))
-                printf("Child process has stopped.n");
+			{	
+                CcspTraceInfo(("Child process has stopped \n", exit_status));
+                l_bCloseFp = true;   
+			}
             break;
         }
     }
-    if (endID == 0)
+    if (0 == endID)
     {
 		CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
-        killChild(pid);
+        signal(SIGCHLD, SIG_IGN);
+        
+		killChild(pid);
+    
+        l_icloseStatus = close(*output_fp);
+		if (CLOSE_ERR == l_icloseStatus)
+            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
+		
+		return NULL;
     }
+    if (true == l_bCloseFp)
+	{    
+		l_icloseStatus = close(*output_fp);
+		if (CLOSE_ERR == l_icloseStatus)
+        	CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
+
+		return NULL;
+	}
     msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
     return pid;
-}
-
-static void killBus()
-{
-    int status;
-    if(!waitpid(busClientToolPid, &status, WNOHANG))
-    {
-        if (!kill(busClientToolPid, 0))
-        {
-            msg_debug("kill is successful!!! \n");
-        }
-        else
-        {
-            msg_debug("kill is not successful!!! error is:%d\n", errno);
-        }
-    }
-    else
-    {
-        msg_debug("waitpid is not successful!!! errno:%d\n", errno);
-    }
-    close(input_fp);
-    close(output_fp);
 }
 
 static bool hotspotfd_isClientAttached(bool *pIsNew)
@@ -273,15 +284,19 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
     int num_devices = 0;
     int instance;
     static bool num_devices_0=0;
-    int read_bytes;
+    int read_bytes, l_outputfp, l_icloseStatus;
+	pid_t l_busClientPid;
 
+    memset(path, 0x00, sizeof(path));
     for(instance=5; instance<=6; instance++) 
 	{
 		sprintf(buffer, khotspotfd_Cmd1, instance);
 
-        busClientToolPid = popen2(buffer, &input_fp, &output_fp);
-        read_bytes = read(output_fp, path, PATH_MAX);
-    
+        l_busClientPid = popen2(buffer, &l_outputfp);
+		if (NULL == l_busClientPid)
+			continue;
+
+        read_bytes = read(l_outputfp, path, (PATH_MAX-1));
         if (READ_ERR != read_bytes)
         {    
             msg_debug("Read is successful while checking number of devices bytes read:%d\n", read_bytes);
@@ -292,15 +307,22 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
                 msg_debug("num_devices: %d\n", num_devices);
             }
         }
+        else if (0 == read_bytes)
+        {
+            CcspTraceError(("EOF detected while reading number of devices\n"));
+		    continue;
+        }
         else //read error case -1 is returned
         {    
 			CcspTraceError(("Read is un-successful hotspotfd error is:%d\n", errno));
 	    }
+        l_icloseStatus = close(l_outputfp);
+        if (CLOSE_ERR == l_icloseStatus) 
+		    CcspTraceInfo(("close status while closing output fp:%d\n", l_icloseStatus));
+
         if (num_devices > 0)
             break;
     }
-    close(input_fp);
-    close(output_fp);
 
     if (num_devices>0) {
 		if(pIsNew && num_devices_0==0) 
@@ -367,7 +389,7 @@ static int _hotspotfd_ping(char *address)
     int status = STATUS_FAILURE;
     struct ifreq ifr;
     unsigned netaddr;
-    static int l_iPingCount;
+    static int l_iPingCount = 0;
 
     // This is the number of ping's to send out
     // per keep alive interval
@@ -653,7 +675,7 @@ static void *hotspotfd_sysevent_handler(void *data)
         err = sysevent_getnotification(sysevent_fd, sysevent_token, name, &namelen,  val, &vallen, &getnotification_id);
 
         if (err) {
-            msg_err("err: %d\n", err);
+            CcspTraceError(("error in sysevent getnotification %d\n", err));
         } else {
             if (strcmp(name, kHotspotfd_primary)==0) {
                 msg_debug("Received %s sysevent\n", kHotspotfd_primary);
@@ -1092,9 +1114,6 @@ int main(int argc, char *argv[])
 
     if (signal(SIGKILL, hotspotfd_SignalHandler) == SIG_ERR)
         msg_debug("Failed to catch SIGTERM\n");
-
-    if (signal(SIGALRM, killBus) == SIG_ERR)
-        msg_debug("Failed to catch SIGALRM\n");
 
     CcspTraceInfo(("Hotspotfd process is up\n"));
     system("touch /tmp/hotspotfd_up");
