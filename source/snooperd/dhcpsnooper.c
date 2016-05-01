@@ -1513,16 +1513,13 @@ static void *snoop_mac_handler(void *data)
 }
 #else
 
-#define kSnooper_Cmd1 "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries"
-#define kSnooper_Cmd2 "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress"
-#define kSnooper_Cmd3  "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.SignalStrength"
-
 #define READ 0
 #define WRITE 1
 #define READ_ERR -1
 #define CLOSE_ERR -1
 
 static char buffer[128];
+char *g_cBuffer[5] = {"/fss/gw/usr/ccsp/ccsp_bus_client_tool", "eRT", "getvalues"};
 typedef struct {
     char mac[18];
     int rssi;
@@ -1548,7 +1545,7 @@ void killChild(pid_t childPid)
     }
 }
 
-static pid_t popen2(const char *cmd, int *output_fp)
+static pid_t popen2(const char **cmd, int *output_fp)
 {
     int p_stdin[2], p_stdout[2];
     int exit_status, i, l_icloseStatus;
@@ -1571,8 +1568,8 @@ static pid_t popen2(const char *cmd, int *output_fp)
         close(p_stdout[WRITE]);
         close(p_stdin[READ]);
 
-        execl("/bin/sh", "sh", "-c", cmd, NULL);
-        perror("execl");
+		execvp(*cmd, cmd);
+        perror("execvp");
         _exit(1);
     }
 
@@ -1590,7 +1587,7 @@ static pid_t popen2(const char *cmd, int *output_fp)
         endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
         if (endID == -1) {            /* error calling waitpid       */
             perror("waitpid error");
-            CcspTraceInfo(("waitPid Error\n"));
+            CcspTraceInfo(("waitPid Error:%d\n", errno));
             l_bCloseFp = true;
             break;
         }
@@ -1619,14 +1616,17 @@ static pid_t popen2(const char *cmd, int *output_fp)
     if (0 == endID)
     {
         CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
-        signal(SIGCHLD, SIG_IGN);
-
         killChild(pid);
-
+        while (0 == waitpid(pid, &exit_status, WNOHANG|WUNTRACED))
+        {
+            sleep(2);
+            CcspTraceError(("Child hasn't exited even after 2 sec \n"));
+        }
         l_icloseStatus = close(*output_fp);
         if (CLOSE_ERR == l_icloseStatus)
             CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
 
+        CcspTraceError(("Child has exited, exit status is:%d\n", exit_status));
         return NULL;
     }
     if (true == l_bCloseFp)
@@ -1648,10 +1648,14 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
     char *pch;
 	int read_bytes, num_devices = 0, l_iOutputfp;
 	pid_t l_busClientPid;
+	
 
     memset(path, 0x00, sizeof(path));
-    sprintf(buffer, kSnooper_Cmd1, index); 
-	l_busClientPid = popen2(buffer, &l_iOutputfp);
+    sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries", index); 
+	g_cBuffer[3] = buffer;
+	g_cBuffer[4] = NULL;
+
+	l_busClientPid = popen2(g_cBuffer, &l_iOutputfp);
 	
 	if(NULL == l_busClientPid)
 		return num_devices;	
@@ -1699,8 +1703,12 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     // Get MAC addresses of associated clients
     for(i=1; i <= num_devices; i++) {
 
-        sprintf(buffer, kSnooper_Cmd2, index, i); 
-	    l_busClientPid = popen2(buffer, &l_outputfp);
+       sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress", index, i); 
+		g_cBuffer[3] = buffer;
+		g_cBuffer[4] = NULL;
+		
+	    l_busClientPid = popen2(g_cBuffer, &l_outputfp);
+			
 		if (NULL == l_busClientPid)
             continue;
  
@@ -1740,8 +1748,11 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     k = start_index;
     for(i=1; i <= num_devices; i++) {
 
-        sprintf(buffer, kSnooper_Cmd3, index, i); 
-        l_busClientPid = popen2(buffer, &l_outputfp);
+		sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.SignalStrength", index, i);
+		g_cBuffer[3] = buffer;
+        g_cBuffer[4] = NULL;
+		
+		l_busClientPid = popen2(g_cBuffer, &l_outputfp);
 		if (NULL == l_busClientPid)
             continue;
 

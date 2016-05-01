@@ -158,7 +158,6 @@ static bool gBothDnFirstSignal = false;
 
 static bool gTunnelIsUp = false;
 
-#define khotspotfd_Cmd1 "/fss/gw/usr/ccsp/ccsp_bus_client_tool eRT getvalues Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries"
 #define READ 0
 #define WRITE 1
 #define CMD_ERR_TIMEOUT 10
@@ -167,23 +166,23 @@ static bool gTunnelIsUp = false;
 
 void sigquit()
 {
-	CcspTraceError(("Inside sigquit terminating child now\n"));
-	_exit(1);
+    CcspTraceError(("Inside sigquit terminating child now\n"));
+    _exit(1);
 }
 
 void killChild(pid_t childPid)
 {
     if (!kill(childPid, SIGQUIT))
     {
-    	CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
+        CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
     }
     else
     {
-    	CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
+        CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
     }
 }
 
-static pid_t popen2(const char *cmd, int *output_fp)
+static pid_t popen2(const char **cmd, int *output_fp)
 {
     int p_stdin[2], p_stdout[2];
     int exit_status, i, l_icloseStatus;
@@ -193,26 +192,26 @@ static pid_t popen2(const char *cmd, int *output_fp)
     if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
         return -1;
     pid = fork();
-    if (pid < 0) 
-        return pid; 
+    if (pid < 0)
+        return pid;
     else if (pid == 0)
-    {   
-		signal(SIGQUIT, sigquit); 
+    {
+        signal(SIGQUIT, sigquit);
         close(p_stdin[WRITE]);
         dup2(p_stdin[READ], READ);
         close(p_stdout[READ]);
         dup2(p_stdout[WRITE], WRITE);
 
-		close(p_stdout[WRITE]);
-		close(p_stdin[READ]);
+        close(p_stdout[WRITE]);
+        close(p_stdin[READ]);
 
-		execl("/bin/sh", "sh", "-c", cmd, NULL);
-        perror("execl");
+		execvp(*cmd, cmd);
+        perror("execvp");
         _exit(1);
     }
 
-	close(p_stdin[READ]);
-	close(p_stdout[WRITE]);
+    close(p_stdin[READ]);
+    close(p_stdout[WRITE]);
     close(p_stdin[WRITE]);
 
     if (output_fp == NULL)
@@ -220,57 +219,61 @@ static pid_t popen2(const char *cmd, int *output_fp)
     else
         *output_fp = p_stdout[READ];
 
-    for(i = 0; i < 10; i++) 
-	{
-    	endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
+	for(i = 0; i < 10; i++) 
+    {
+        endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
         if (endID == -1) {            /* error calling waitpid       */
-        	CcspTraceInfo(("waitPid Error\n"));
-			l_bCloseFp = true;
+            perror("waitpid error");
+            CcspTraceInfo(("waitPid Error:%d\n", errno));
+            l_bCloseFp = true;
             break;
         }
         else if (endID == 0) {        /* child still running         */
-            printf("Parent waiting for child\n");
+            msg_debug("Parent waiting for child\n");
             sleep(1);
         }
         else if (endID == pid) {  /* child ended                 */
-        	if (WIFEXITED(exit_status))
-			{
-            	msg_debug("Child ended normally \n");
-			}	
+            if (WIFEXITED(exit_status))
+            { 
+                msg_debug("Child ended normally \n");
+            }
             else if (WIFSIGNALED(exit_status))
-			{
-				CcspTraceInfo(("Child ended because of an uncaught signal \n", exit_status));
+            {
+                CcspTraceInfo(("Child ended because of an uncaught signal \n", exit_status));
                 l_bCloseFp = true;
 			}
             else if (WIFSTOPPED(exit_status))
-			{	
+            {
                 CcspTraceInfo(("Child process has stopped \n", exit_status));
-                l_bCloseFp = true;   
-			}
+                l_bCloseFp = true;
+            }
             break;
         }
     }
     if (0 == endID)
     {
-		CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
-        signal(SIGCHLD, SIG_IGN);
-        
-		killChild(pid);
-    
+        CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
+        killChild(pid);
+        while (0 == waitpid(pid, &exit_status, WNOHANG|WUNTRACED))
+        {
+            sleep(2);
+            CcspTraceError(("Child hasn't exited even after 2 sec \n"));
+        }
         l_icloseStatus = close(*output_fp);
-		if (CLOSE_ERR == l_icloseStatus)
+        if (CLOSE_ERR == l_icloseStatus)
             CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
-		
-		return NULL;
+
+        CcspTraceError(("Child has exited, exit status is:%d\n", exit_status));
+        return NULL;
     }
     if (true == l_bCloseFp)
-	{    
-		l_icloseStatus = close(*output_fp);
-		if (CLOSE_ERR == l_icloseStatus)
-        	CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
+    {
+        l_icloseStatus = close(*output_fp);
+        if (CLOSE_ERR == l_icloseStatus)
+            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
 
-		return NULL;
-	}
+        return NULL;
+    }
     msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
     return pid;
 }
@@ -278,23 +281,27 @@ static pid_t popen2(const char *cmd, int *output_fp)
 static bool hotspotfd_isClientAttached(bool *pIsNew)
 {
     FILE *fp=NULL;
-    char buffer[1024]="";
     char path[PATH_MAX];
     char *pch=NULL;
     int num_devices = 0;
     int instance;
     static bool num_devices_0=0;
     int read_bytes, l_outputfp, l_icloseStatus;
-	pid_t l_busClientPid;
-
+    pid_t l_busClientPid;
+    char *l_cBuffer[5] = {"/fss/gw/usr/ccsp/ccsp_bus_client_tool", "eRT", "getvalues"};
+	
     memset(path, 0x00, sizeof(path));
     for(instance=5; instance<=6; instance++) 
-	{
-		sprintf(buffer, khotspotfd_Cmd1, instance);
-
-        l_busClientPid = popen2(buffer, &l_outputfp);
-		if (NULL == l_busClientPid)
-			continue;
+    {
+        if (5 == instance)
+    	    l_cBuffer[3] = "Device.WiFi.AccessPoint.5.AssociatedDeviceNumberOfEntries";
+	else
+    	    l_cBuffer[3] = "Device.WiFi.AccessPoint.6.AssociatedDeviceNumberOfEntries";
+	l_cBuffer[4] = NULL;
+		
+        l_busClientPid = popen2(l_cBuffer, &l_outputfp);
+	if (NULL == l_busClientPid)
+	    continue;
 
         read_bytes = read(l_outputfp, path, (PATH_MAX-1));
         if (READ_ERR != read_bytes)
@@ -303,34 +310,33 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
             pch = strstr(path, "ue:");
             if (pch) {
                 num_devices = atoi(&pch[4]);
-                msg_debug("cmd: %s\n", buffer);
                 msg_debug("num_devices: %d\n", num_devices);
             }
         }
         else if (0 == read_bytes)
         {
             CcspTraceError(("EOF detected while reading number of devices\n"));
-		    continue;
+            continue;
         }
         else //read error case -1 is returned
         {    
-			CcspTraceError(("Read is un-successful hotspotfd error is:%d\n", errno));
-	    }
+            CcspTraceError(("Read is un-successful hotspotfd error is:%d\n", errno));
+	}
         l_icloseStatus = close(l_outputfp);
         if (CLOSE_ERR == l_icloseStatus) 
-		    CcspTraceInfo(("close status while closing output fp:%d\n", l_icloseStatus));
+	    CcspTraceInfo(("close status while closing output fp:%d\n", l_icloseStatus));
 
         if (num_devices > 0)
             break;
     }
 
     if (num_devices>0) {
-		if(pIsNew && num_devices_0==0) 
-			*pIsNew=true;
-		num_devices_0=num_devices;
-		return true;
-	} 
+	if(pIsNew && num_devices_0==0) 
+	    *pIsNew=true;
 	num_devices_0=num_devices;
+	return true;
+    } 
+    num_devices_0=num_devices;
     return false;
 }
 
