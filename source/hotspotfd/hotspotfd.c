@@ -286,7 +286,7 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
     int num_devices = 0;
     int instance;
     static bool num_devices_0=0;
-    int read_bytes, l_outputfp, l_icloseStatus;
+    int read_bytes, l_outputfp, l_icloseStatus, l_iFlags;
     pid_t l_busClientPid;
     char *l_cBuffer[5] = {"/fss/gw/usr/ccsp/ccsp_bus_client_tool", "eRT", "getvalues"};
 	
@@ -295,13 +295,18 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
     {
         if (5 == instance)
     	    l_cBuffer[3] = "Device.WiFi.AccessPoint.5.AssociatedDeviceNumberOfEntries";
-	else
+   	    else
     	    l_cBuffer[3] = "Device.WiFi.AccessPoint.6.AssociatedDeviceNumberOfEntries";
-	l_cBuffer[4] = NULL;
+   	    l_cBuffer[4] = NULL;
 		
         l_busClientPid = popen2(l_cBuffer, &l_outputfp);
-	if (NULL == l_busClientPid)
-	    continue;
+	    if (NULL == l_busClientPid)
+	        continue;
+
+        l_iFlags = fcntl(l_outputfp, F_GETFL, 0);
+        if (fcntl(l_outputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
+            CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
+        }
 
         read_bytes = read(l_outputfp, path, (PATH_MAX-1));
         if (READ_ERR != read_bytes)
@@ -318,13 +323,17 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
             CcspTraceError(("EOF detected while reading number of devices\n"));
             continue;
         }
+        else if (EAGAIN == errno) //Nothing to read from the pipe
+        {
+            CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
+        }
         else //read error case -1 is returned
         {    
             CcspTraceError(("Read is un-successful hotspotfd error is:%d\n", errno));
-	}
+	    }
         l_icloseStatus = close(l_outputfp);
         if (CLOSE_ERR == l_icloseStatus) 
-	    CcspTraceInfo(("close status while closing output fp:%d\n", l_icloseStatus));
+	        CcspTraceInfo(("close status while closing output fp:%d\n", l_icloseStatus));
 
         if (num_devices > 0)
             break;
