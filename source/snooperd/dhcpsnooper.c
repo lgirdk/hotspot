@@ -1648,7 +1648,7 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
     char *pch;
 	int read_bytes, num_devices = 0, l_iOutputfp;
 	pid_t l_busClientPid;
-	
+    int l_iFlags;
 
     memset(path, 0x00, sizeof(path));
     sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries", index); 
@@ -1660,6 +1660,10 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
 	if(NULL == l_busClientPid)
 		return num_devices;	
 
+    l_iFlags = fcntl(l_iOutputfp, F_GETFL, 0);
+    if (fcntl(l_iOutputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
+        CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
+    }
 	read_bytes = read(l_iOutputfp, path, (PATH_MAX-1));
 	if (READ_ERR != read_bytes)
 	{	
@@ -1680,6 +1684,10 @@ static int snoop_getNumAssociatedDevicesPerSSID(int index)
         CcspTraceError(("EOF detected while reading number of devices\n"));
 		return num_devices;
     }
+    else if (EAGAIN == errno) //Nothing to read from the pipe
+    {
+        CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
+    }
 	else //read error case -1 is returned
 	{
 		CcspTraceError(("Read is un-successful Associated Devices error is:%d\n", errno));		
@@ -1698,6 +1706,7 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
     int i, j, k = start_index, rssi;
 	int read_bytes, l_outputfp, l_icloseStatus;
     pid_t l_busClientPid;
+    int l_iFlags;
 
     memset(path, 0x00, sizeof(path));
     // Get MAC addresses of associated clients
@@ -1712,6 +1721,10 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
 		if (NULL == l_busClientPid)
             continue;
  
+        l_iFlags = fcntl(l_outputfp, F_GETFL, 0);
+        if (fcntl(l_outputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
+            CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
+        }
     	read_bytes = read(l_outputfp, path, (PATH_MAX-1));
 		if (READ_ERR != read_bytes)
 		{	
@@ -1737,6 +1750,10 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
             CcspTraceError(("EOF detected while getting MAC address of the connected device\n"));
 		    continue;
         }
+        else if (EAGAIN == errno) //Nothing to read from the pipe
+        {
+            CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
+        }
 		else //read error case -1 is returned
 		{
 			CcspTraceError(("Read is un-successful getting MAC error is:%d\n", errno));		
@@ -1756,6 +1773,10 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
 		if (NULL == l_busClientPid)
             continue;
 
+        l_iFlags = fcntl(l_outputfp, F_GETFL, 0);
+        if (fcntl(l_outputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
+            CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
+        }
         read_bytes = read(l_outputfp, path, (PATH_MAX-1));
 		if (READ_ERR != read_bytes)
 		{	
@@ -1775,6 +1796,10 @@ static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_
         {
             CcspTraceError(("EOF detected while getting RSSI of the connected device\n"));
 		    continue;
+        }
+        else if (EAGAIN == errno) //Nothing to read from the pipe
+        {
+            CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
         }
 		else //read error case -1 is returned
 		{
