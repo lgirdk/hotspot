@@ -132,5 +132,5 @@ typedef struct
 
 #define kSnooper_Statistics           865889 // key used for shared memory
 #define kSnooper_SharedMemSize        sizeof(snooper_statistics_s)
-
+#define DNSMASQ_LEASES_FILE 		  "/nvram/dnsmasq.leases"
 #endif
