@@ -821,6 +821,39 @@ static void snoop_RemoveClientListEntry(char *pRemote_id)
     }
 }
 
+/*
+This function is to check whether the XfinityWifi Client was previously a private client 
+*/
+static void snoop_CheckClientIsPrivate(char *pRemote_id)
+{
+    FILE *l_dnsfp = NULL;
+    char l_cBuf[200] = {0}; 
+    int ret, l_iLeaseTime; 
+    char l_cDhcpClientAddr[20] = {0}; 
+    char l_cIpAddr[255] = {0}; 
+    char l_cHostName[255] = {0}; 
+
+    if ((l_dnsfp = fopen(DNSMASQ_LEASES_FILE, "r")) == NULL)
+    {    
+        CcspTraceError(("dnsmasq.leases file open failed\n"));
+        return;
+    }    
+
+    while (fgets(l_cBuf, sizeof(l_cBuf), l_dnsfp)!= NULL)
+    {    
+        ret = sscanf(l_cBuf, "%d %s %s %s", &l_iLeaseTime, l_cDhcpClientAddr, l_cIpAddr, l_cHostName);
+        if(ret != 4)
+            continue;
+
+        if (!strcasecmp(pRemote_id, l_cDhcpClientAddr))
+        {
+            CcspTraceInfo(("Client with MAC:%s is part of private clients\n", pRemote_id));
+            break;
+        }
+    }
+    fclose(l_dnsfp);
+}
+
 static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id, 
                                   char *pDhcp_status, char *pIpv4_addr, char *pHostname)
 {
@@ -1278,7 +1311,7 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 				}
 				strcpy(l_cHostName, g_cHostnameForQueue[queue_number]);
 				snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName);
-
+                snoop_CheckClientIsPrivate(gRemote_id);  
         	}
     	    snoop_log();
 
