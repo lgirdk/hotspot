@@ -87,6 +87,7 @@
 #include "debug.h"
 #include "hotspotfd.h"
 #include "ccsp_trace.h"
+#include "dhcpsnooper.h"
 
 #define PACKETSIZE  64
 #define kDefault_KeepAliveInterval      60 
@@ -111,7 +112,6 @@ struct packet {
     char msg[PACKETSIZE-sizeof(struct icmphdr)];
 };
 
-unsigned int glog_level             = LOG_NOISE;
 unsigned int gKeepAliveInterval     = kDefault_KeepAliveInterval;
 unsigned int gKeepAliveIntervalFailure     = kDefault_KeepAliveIntervalFailure;
 unsigned int gKeepAliveThreshold    = kDefault_KeepAliveThreshold;
@@ -142,6 +142,8 @@ static pthread_t sysevent_tid;
 
 static int gShm_fd;
 static hotspotfd_statistics_s * gpStats;
+static int gShm_snoop_fd;
+snooper_statistics_s * gpSnoop_Stats;
 static int  gKeepAliveChecksumCnt = 0;  
 static int  gKeepAliveSequenceCnt = 0;   
 static int  gDeadInterval = 5 * kDefault_KeepAliveInterval;   
@@ -158,194 +160,50 @@ static bool gBothDnFirstSignal = false;
 
 static bool gTunnelIsUp = false;
 
-#define READ 0
-#define WRITE 1
-#define CMD_ERR_TIMEOUT 10
-#define READ_ERR -1
-#define CLOSE_ERR -1
+static pthread_t dhcp_snooper_tid;
+static pthread_t dhcp_snooper_sysevent_tid;
+static pthread_t lm_tid;
+int gSnoopNumberOfClients = 0; //shared variable across hotspotfd and dhcp_snooperd
 
-void sigquit()
-{
-    CcspTraceError(("Inside sigquit terminating child now\n"));
-    _exit(1);
-}
+bool gSnoopEnable = true;
+bool gSnoopDebugEnabled = false;
+bool gSnoopLogEnabled = true;
+bool gSnoopCircuitEnabled = true;
+bool gSnoopRemoteEnabled = true;
+int gSnoopFirstQueueNumber = kSnoop_DefaultQueue;
+int gSnoopNumberOfQueues = kSnoop_DefaultNumberOfQueues;
 
-void killChild(pid_t childPid)
-{
-    if (!kill(childPid, SIGQUIT))
-    {
-        CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
-    }
-    else
-    {
-        CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
-    }
-}
 
-static pid_t popen2(const char **cmd, int *output_fp)
-{
-    int p_stdin[2], p_stdout[2];
-    int exit_status, i, l_icloseStatus;
-    bool l_bCloseFp = false;
+int gSnoopMaxNumberOfClients = kSnoop_DefaultMaxNumberOfClients;
+char gSnoopCircuitIDList[kSnoop_MaxCircuitIDs][kSnoop_MaxCircuitLen];
+char gSnoopSyseventCircuitIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = { 
+    kSnooper_circuit_id0,
+    kSnooper_circuit_id1,
+    kSnooper_circuit_id2,
+    kSnooper_circuit_id3,
+    kSnooper_circuit_id4
+};
 
-    pid_t pid, endID;
-    if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
-        return -1;
-    pid = fork();
-    if (pid < 0)
-        return pid;
-    else if (pid == 0)
-    {
-        signal(SIGQUIT, sigquit);
-        close(p_stdin[WRITE]);
-        dup2(p_stdin[READ], READ);
-        close(p_stdout[READ]);
-        dup2(p_stdout[WRITE], WRITE);
-
-        close(p_stdout[WRITE]);
-        close(p_stdin[READ]);
-
-		execvp(*cmd, cmd);
-        perror("execvp");
-        _exit(1);
-    }
-
-    close(p_stdin[READ]);
-    close(p_stdout[WRITE]);
-    close(p_stdin[WRITE]);
-
-    if (output_fp == NULL)
-        close(p_stdout[READ]);
-    else
-        *output_fp = p_stdout[READ];
-
-	for(i = 0; i < 10; i++) 
-    {
-        endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
-        if (endID == -1) {            /* error calling waitpid       */
-            perror("waitpid error");
-            CcspTraceInfo(("waitPid Error:%d\n", errno));
-            l_bCloseFp = true;
-            break;
-        }
-        else if (endID == 0) {        /* child still running         */
-            msg_debug("Parent waiting for child\n");
-            sleep(1);
-        }
-        else if (endID == pid) {  /* child ended                 */
-            if (WIFEXITED(exit_status))
-            { 
-                msg_debug("Child ended normally \n");
-            }
-            else if (WIFSIGNALED(exit_status))
-            {
-                CcspTraceInfo(("Child ended because of an uncaught signal \n", exit_status));
-                l_bCloseFp = true;
-			}
-            else if (WIFSTOPPED(exit_status))
-            {
-                CcspTraceInfo(("Child process has stopped \n", exit_status));
-                l_bCloseFp = true;
-            }
-            break;
-        }
-    }
-    if (0 == endID)
-    {
-        CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
-        killChild(pid);
-        while (0 == waitpid(pid, &exit_status, WNOHANG|WUNTRACED))
-        {
-            sleep(2);
-            CcspTraceError(("Child hasn't exited even after 2 sec \n"));
-        }
-        l_icloseStatus = close(*output_fp);
-        if (CLOSE_ERR == l_icloseStatus)
-            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
-
-        CcspTraceError(("Child has exited, exit status is:%d\n", exit_status));
-        return NULL;
-    }
-    if (true == l_bCloseFp)
-    {
-        l_icloseStatus = close(*output_fp);
-        if (CLOSE_ERR == l_icloseStatus)
-            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
-
-        return NULL;
-    }
-    msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
-    return pid;
-}
+char gSnoopSSIDList[kSnoop_MaxCircuitIDs][kSnoop_MaxCircuitLen];
+int  gSnoopSSIDListInt[kSnoop_MaxCircuitIDs];
+char gSnoopSyseventSSIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = { 
+    kSnooper_ssid_index0,
+    kSnooper_ssid_index1,
+    kSnooper_ssid_index2,
+    kSnooper_ssid_index3,
+    kSnooper_ssid_index4
+};
 
 static bool hotspotfd_isClientAttached(bool *pIsNew)
 {
-    FILE *fp=NULL;
-    char path[PATH_MAX];
-    char *pch=NULL;
-    int num_devices = 0;
-    int instance;
     static bool num_devices_0=0;
-    int read_bytes, l_outputfp, l_icloseStatus, l_iFlags;
-    pid_t l_busClientPid;
-    char *l_cBuffer[5] = {"/fss/gw/usr/ccsp/ccsp_bus_client_tool", "eRT", "getvalues"};
-	
-    memset(path, 0x00, sizeof(path));
-    for(instance=5; instance<=6; instance++) 
-    {
-        if (5 == instance)
-    	    l_cBuffer[3] = "Device.WiFi.AccessPoint.5.AssociatedDeviceNumberOfEntries";
-   	    else
-    	    l_cBuffer[3] = "Device.WiFi.AccessPoint.6.AssociatedDeviceNumberOfEntries";
-   	    l_cBuffer[4] = NULL;
-		
-        l_busClientPid = popen2(l_cBuffer, &l_outputfp);
-	    if (NULL == l_busClientPid)
-	        continue;
-
-        l_iFlags = fcntl(l_outputfp, F_GETFL, 0);
-        if (fcntl(l_outputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
-            CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
-        }
-
-        read_bytes = read(l_outputfp, path, (PATH_MAX-1));
-        if (READ_ERR != read_bytes)
-        {    
-            msg_debug("Read is successful while checking number of devices bytes read:%d\n", read_bytes);
-            pch = strstr(path, "ue:");
-            if (pch) {
-                num_devices = atoi(&pch[4]);
-                msg_debug("num_devices: %d\n", num_devices);
-            }
-        }
-        else if (0 == read_bytes)
-        {
-            CcspTraceError(("EOF detected while reading number of devices\n"));
-            continue;
-        }
-        else if (EAGAIN == errno) //Nothing to read from the pipe
-        {
-            CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
-        }
-        else //read error case -1 is returned
-        {    
-            CcspTraceError(("Read is un-successful hotspotfd error is:%d\n", errno));
-	    }
-        l_icloseStatus = close(l_outputfp);
-        if (CLOSE_ERR == l_icloseStatus) 
-	        CcspTraceInfo(("close status while closing output fp:%d\n", l_icloseStatus));
-
-        if (num_devices > 0)
-            break;
-    }
-
-    if (num_devices>0) {
-	if(pIsNew && num_devices_0==0) 
-	    *pIsNew=true;
-	num_devices_0=num_devices;
-	return true;
-    } 
-    num_devices_0=num_devices;
+    if (gSnoopNumberOfClients > 0) { 
+        if(pIsNew && num_devices_0==0) 
+            *pIsNew=true;
+        num_devices_0 = gSnoopNumberOfClients;
+        return true;
+    }    
+    num_devices_0 = gSnoopNumberOfClients;
     return false;
 }
 
@@ -590,6 +448,7 @@ static void hotspotfd_SignalHandler(int signo)
 #endif
 
     close(gShm_fd);
+    close(gShm_snoop_fd);
     exit(0);
 }
 
@@ -669,6 +528,17 @@ static void *hotspotfd_sysevent_handler(void *data)
     async_id_t hotspotfd_enable_id;
     async_id_t hotspotfd_log_enable_id;
     async_id_t hotspotfd_keep_alive_count_id;
+    
+	async_id_t snoop_enable_id;
+    async_id_t snoop_debug_enable_id;
+    async_id_t snoop_log_enable_id;
+    async_id_t snoop_circuit_enable_id;
+    async_id_t snoop_remote_enable_id;
+    async_id_t snoop_max_clients_id;
+    async_id_t snoop_circuit_ids[kSnoop_MaxCircuitIDs]; 
+    async_id_t snoop_ssids_ids[kSnoop_MaxCircuitIDs];
+
+    int i = 0;
 
     sysevent_setnotification(sysevent_fd, sysevent_token, kHotspotfd_primary,              &hotspotfd_primary_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_secondary,            &hotspotfd_secondary_id);
@@ -679,6 +549,23 @@ static void *hotspotfd_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_enable,               &hotspotfd_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_log_enable,           &hotspotfd_log_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_keep_alive_count,     &hotspotfd_keep_alive_count_id);
+
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_enable,          &snoop_enable_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_debug_enable,    &snoop_debug_enable_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_log_enable,      &snoop_log_enable_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_circuit_enable,  &snoop_circuit_enable_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_remote_enable,   &snoop_remote_enable_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_max_clients,     &snoop_max_clients_id);
+
+    for(i=0; i<kSnoop_MaxCircuitIDs; i++) 
+	{
+        sysevent_setnotification(sysevent_fd, sysevent_token, gSnoopSyseventCircuitIDs[i], &snoop_circuit_ids[i]);
+    }
+
+    for(i=0; i<kSnoop_MaxCircuitIDs; i++) 
+	{
+        sysevent_setnotification(sysevent_fd, sysevent_token, gSnoopSyseventSSIDs[i], &snoop_ssids_ids[i]);
+    }
 
     for (;;) {
         char name[25], val[20];
@@ -783,8 +670,75 @@ static void *hotspotfd_sysevent_handler(void *data)
 
                 msg_debug("gDeadInterval: %u\n", gDeadInterval);
             }
-        }
+            else if (strcmp(name, kSnooper_enable)==0) {
+                msg_debug("Received %s sysevent\n", kSnooper_enable);
+                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
 
+                gSnoopEnable = atoi(val);
+
+                CcspTraceInfo(("gSnoopEnable: %u\n", gSnoopEnable));
+
+            } else if (strcmp(name, kSnooper_debug_enable)==0) {
+                msg_debug("Received %s sysevent\n", kSnooper_debug_enable);
+                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
+
+                gSnoopDebugEnabled = atoi(val);
+
+                CcspTraceInfo(("gSnoopDebugEnabled: %u\n", gSnoopDebugEnabled));
+
+            } else if (strcmp(name, kSnooper_log_enable)==0) {
+                msg_debug("Received %s sysevent\n", kSnooper_log_enable);
+                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
+
+                gSnoopLogEnabled = atoi(val);
+
+                CcspTraceInfo(("gSnoopDebugEnabled: %u\n", gSnoopLogEnabled));
+
+            } else if (strcmp(name, kSnooper_circuit_enable)==0) {
+                msg_debug("Received %s sysevent\n", kSnooper_circuit_enable);
+                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
+
+                gSnoopCircuitEnabled = atoi(val);
+
+                CcspTraceInfo(("gSnoopCircuitEnabled: %u\n", gSnoopCircuitEnabled));
+
+            } else if (strcmp(name, kSnooper_remote_enable)==0) {
+                msg_debug("Received %s sysevent\n", kSnooper_remote_enable);
+                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
+
+                gSnoopRemoteEnabled = atoi(val);
+
+                CcspTraceInfo(("gSnoopRemoteEnabled: %u\n", gSnoopRemoteEnabled));
+
+            } else if (strcmp(name, kSnooper_max_clients)==0) {
+                msg_debug("Received %s sysevent\n", kSnooper_max_clients);
+                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
+
+                gSnoopMaxNumberOfClients = atoi(val);
+
+                CcspTraceInfo(("gSnoopMaxNumberOfClients: %u\n", gSnoopMaxNumberOfClients));
+
+            } 
+
+            for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
+
+                if (strcmp(name, gSnoopSyseventCircuitIDs[i])==0) {
+					CcspTraceInfo(("CircuitID list case\n"));
+	                strcpy(gSnoopCircuitIDList[i], val); 
+                    break;
+                }
+            }
+
+            for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
+
+                if (strcmp(name, gSnoopSyseventSSIDs[i])==0) {
+					CcspTraceInfo(("gSnoopSSIDListInt case\n"));
+                    strcpy(gSnoopSSIDList[i], val);
+                    gSnoopSSIDListInt[i] = atoi(val);
+                    break;
+                }
+            }
+		}
         hotspotfd_log();
     }
 
@@ -809,6 +763,25 @@ static int hotspotfd_setupSharedMemory(void)
         // Attach the segment to our data space.
         if ((gpStats = (hotspotfd_statistics_s *)shmat(gShm_fd, NULL, 0)) == (hotspotfd_statistics_s *) -1) {
             CcspTraceError(("shmat failed while setting up shared memory\n")); 
+
+            perror("shmat");
+
+            status = STATUS_FAILURE;
+            break;
+        }
+
+		// Create shared memory segment to get link state
+        if ((gShm_snoop_fd = shmget(kSnooper_Statistics, kSnooper_SharedMemSize, IPC_CREAT | 0666)) < 0) { 
+            CcspTraceError(("shmget failed while setting up shared memory\n")); 
+
+            perror("shmget");
+            status = STATUS_FAILURE;
+            break;
+        }
+
+        // Attach the segment to our data space.
+        if ((gpSnoop_Stats = (snooper_statistics_s *)shmat(gShm_snoop_fd, NULL, 0)) == (snooper_statistics_s *) -1) {
+            CcspTraceError(("shmat failed whiler setting up shared memory\n")); 
 
             perror("shmat");
 
@@ -948,11 +921,112 @@ static int hotspotfd_getStartupParameters(void)
             msg_debug("Loaded sysevent %s with %d\n", khotspotfd_keep_alive_count, gKeepAliveCount); 
 
         } else {
-
             CcspTraceError(("Invalid gKeepAliveCount: %d\n", gKeepAliveCount)); 
             status = STATUS_FAILURE;
             break;
         }
+
+		//DHCP Snooper related
+	    int i;
+
+		CcspTraceInfo(("Inside snoop_getStartupParameters fn sysevent_fd is:%d \n", sysevent_fd));
+    	for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues+gSnoopFirstQueueNumber; i++) 
+		{
+        	if((status = sysevent_get(sysevent_fd, sysevent_token, gSnoopSyseventCircuitIDs[i], 
+            	                      gSnoopCircuitIDList[i], kSnoop_MaxCircuitLen))) 
+			{
+            	CcspTraceError(("sysevent_get failed to get %s: %d\n", gSnoopSyseventCircuitIDs[i], status)); 
+            	status = STATUS_FAILURE;
+            	break;
+	        } 
+			else 
+			{
+            	msg_debug("Loaded sysevent gSnoopSyseventCircuitIDs[%d]: %s with %s\n", 
+                	      i, gSnoopSyseventCircuitIDs[i], 
+                    	  gSnoopCircuitIDList[i]
+            	);  
+            	CcspTraceInfo(("Loaded sysevent gSnoopSyseventCircuitIDs[%d]: %s with %s\n", 
+                		      i, gSnoopSyseventCircuitIDs[i], 
+                      		  gSnoopCircuitIDList[i]
+            	));  
+        	}
+    	}
+
+    	for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues+gSnoopFirstQueueNumber; i++) 
+		{
+	        if((status = sysevent_get(sysevent_fd, sysevent_token, gSnoopSyseventSSIDs[i], 
+    	                              gSnoopSSIDList[i], kSnoop_MaxCircuitLen))) 
+			{
+	            CcspTraceError(("sysevent_get failed to get %s: %d\n", gSnoopSyseventSSIDs[i], status)); 
+    	        status = STATUS_FAILURE;
+        	    break;
+	        } 
+			else 
+			{
+	            if(gSnoopSSIDList[i]) 
+				{
+    	           gSnoopSSIDListInt[i] = atoi(gSnoopSSIDList[i]);
+            	} 
+				else 
+				{
+               		gSnoopSSIDListInt[i] = gSnoopFirstQueueNumber; 
+            	}
+            	msg_debug("Loaded sysevent %s with %d\n", gSnoopSyseventSSIDs[i], gSnoopSSIDListInt[i]); 
+            	CcspTraceInfo(("Loaded sysevent %s with %d\n", gSnoopSyseventSSIDs[i], gSnoopSSIDListInt[i])); 
+        	}
+    	}
+
+    	if(status == STATUS_SUCCESS) 
+		{
+	        if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_circuit_enable, 
+    	                              buf, kSnoop_max_sysevent_len))) 
+			{
+            	CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_circuit_enable, status)); 
+            	status = STATUS_FAILURE;
+        	} 
+			else 
+			{
+	            gSnoopCircuitEnabled = atoi(buf);
+    	        msg_debug("Loaded sysevent %s with %d\n", kSnooper_circuit_enable, gSnoopCircuitEnabled);  
+        	    CcspTraceInfo(("Loaded sysevent %s with %d\n", kSnooper_circuit_enable, gSnoopCircuitEnabled));  
+        	}
+    	}
+
+	    if(status == STATUS_SUCCESS) 
+		{
+	        if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_remote_enable, 
+    	                              buf, kSnoop_max_sysevent_len))) 
+			{
+	            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_remote_enable, status)); 
+    	        status = STATUS_FAILURE;
+        	} 
+			else 
+			{
+	            gSnoopRemoteEnabled = atoi(buf);
+    	        msg_debug("Loaded sysevent %s with %d\n", kSnooper_remote_enable, gSnoopRemoteEnabled);  
+        	    CcspTraceInfo(("Loaded sysevent %s with %d\n", kSnooper_remote_enable, gSnoopRemoteEnabled));  
+	        }
+    	}
+
+	    if(status == STATUS_SUCCESS) 
+		{
+	        if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_max_clients, 
+    	                              buf, kSnoop_max_sysevent_len))) 
+			{
+	            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_max_clients, status)); 
+    	        gSnoopMaxNumberOfClients = kSnoop_DefaultMaxNumberOfClients;
+        	    status = STATUS_FAILURE;
+        	} 
+			else 
+			{
+	            if(atoi(buf)) 
+				{
+    	            gSnoopMaxNumberOfClients = atoi(buf);
+            	} 
+            	msg_debug("Loaded sysevent %s with %d\n", kSnooper_max_clients, gSnoopMaxNumberOfClients);  
+            	CcspTraceInfo(("Loaded sysevent %s with %d\n", kSnooper_max_clients, gSnoopMaxNumberOfClients));  
+        	}
+    	}   
 
     } while (0);
 
@@ -1120,6 +1194,7 @@ int main(int argc, char *argv[])
 		CcspTraceError(("Could not setup shared memory hotspotfd bring up aborted\n"));
         exit(1);
     }
+    pthread_create(&dhcp_snooper_tid, NULL, dhcp_snooper_init, NULL);
 
     if (signal(SIGTERM, hotspotfd_SignalHandler) == SIG_ERR)
         msg_debug("Failed to catch SIGTERM\n");
@@ -1133,6 +1208,26 @@ int main(int argc, char *argv[])
     CcspTraceInfo(("Hotspotfd process is up\n"));
     system("touch /tmp/hotspotfd_up");
     hotspotfd_log();
+
+#ifdef __HAVE_SYSEVENT__
+    if(pthread_create(&lm_tid, NULL, snoop_mac_handler, NULL))
+    {
+        CcspTraceError(("Call to pthread_create lm_tid failed\n"));
+        exit(1);
+    }
+    {
+        pthread_attr_t attr_snoop_mac_handler;
+        int policy = 0;
+        int min_prio_for_policy = SCHED_RR;
+
+        pthread_attr_init(&attr_snoop_mac_handler);
+        pthread_attr_getschedpolicy(&attr_snoop_mac_handler, &policy);
+
+        min_prio_for_policy = sched_get_priority_min(policy);
+        pthread_setschedprio(lm_tid, min_prio_for_policy);
+    }
+	//pthread_join(lm_tid, status);
+#endif
 
     keep_it_alive:
 
