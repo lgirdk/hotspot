@@ -746,6 +746,61 @@ static void *hotspotfd_sysevent_handler(void *data)
 }
 #endif
 
+bool deleteSharedMem(int key, bool snooper)
+{
+    int maxkey, id, shmid = 0;
+    struct shm_info shm_info;
+    struct shmid_ds shmds;
+
+    maxkey = shmctl(0, SHM_INFO, (void *) &shm_info);
+    for(id = 0; id <= maxkey; id++) {
+        shmid = shmctl(id, SHM_STAT, &shmds);
+
+        char shmidchar[16];
+        snprintf(shmidchar, sizeof(shmidchar), "%d", shmid);
+        if (shmid < 0)
+            continue;
+        if(shmds.shm_segsz > 0 && key == shmds.shm_perm.__key) {
+            CcspTraceError(("Existing shared memory segment %s found! key: %d size:%d. Deleting!\n",shmidchar, shmds.shm_perm.__key, shmds.shm_segsz));
+            if (snooper) {
+                struct snooper_statistics_s *snStats;
+                if ((snStats = (snooper_statistics_s *)shmat(shmid, 0, 0)) == (snooper_statistics_s *)-1)
+                {
+                    perror("shmat error");
+                    snStats = NULL;
+                    return false;
+                }
+                if (shmdt(snStats))
+                {
+                    perror("shmdt");
+                    return false;
+                }
+            } else {
+                struct hotspotfd_statistics_s *htStats;
+                if ((htStats = (hotspotfd_statistics_s *)shmat(shmid, 0, 0)) == (hotspotfd_statistics_s *)-1)
+                {
+                    perror("shmat error");
+                    htStats = NULL;
+                    return false;
+                }
+                if (shmdt(htStats))
+                {
+                    perror("shmdt");
+                    return false;
+                }
+            }
+
+            if (shmctl(shmid, IPC_RMID, 0) < 0)
+            {
+                perror("shmctl");
+                return false;
+            }
+            break;
+        }
+    }
+
+    return true;
+}
 static int hotspotfd_setupSharedMemory(void)
 {
     int status = STATUS_SUCCESS;
@@ -753,16 +808,35 @@ static int hotspotfd_setupSharedMemory(void)
     do {
         // Create shared memory segment to get link state
         if ((gShm_fd = shmget(kKeepAlive_Statistics, kKeepAlive_SharedMemSize, IPC_CREAT | 0666)) < 0) {
-            CcspTraceError(("shmget failed while setting up shared memory\n")); 
-
-            perror("shmget");
-            status = STATUS_FAILURE;
-            break;
+            if (errno == EEXIST || errno == EINVAL)
+            {
+                // The key already exists in shared memory. We will try to delete and re-create
+                if (true == deleteSharedMem(kKeepAlive_Statistics, false))
+                {
+                    if ((gShm_fd = shmget(kKeepAlive_Statistics, kKeepAlive_SharedMemSize, IPC_CREAT | 0666)) < 0) {
+                        perror("shmget");
+                        status = STATUS_FAILURE;
+                        CcspTraceError(("shmget failed while setting up hotspot shared memory\n")); 
+                        break;
+                    }
+                } else {
+                    perror("delete shared memory failed");
+                    CcspTraceError(("Failed while trying to delete existing hotspot shared memory\n")); 
+                    status = STATUS_FAILURE;
+                    break;
+                }
+            } else {
+                // other error besides "already exists" or "wrong size"
+                perror("shmget");
+                status = STATUS_FAILURE;
+                CcspTraceError(("shmget failed while setting up hotspot shared memory: %d\n", errno)); 
+                break;
+            }
         }
 
         // Attach the segment to our data space.
         if ((gpStats = (hotspotfd_statistics_s *)shmat(gShm_fd, NULL, 0)) == (hotspotfd_statistics_s *) -1) {
-            CcspTraceError(("shmat failed while setting up shared memory\n")); 
+            CcspTraceError(("shmat failed while setting up hotspot shared memory segment\n")); 
 
             perror("shmat");
 
@@ -772,16 +846,35 @@ static int hotspotfd_setupSharedMemory(void)
 
 		// Create shared memory segment to get link state
         if ((gShm_snoop_fd = shmget(kSnooper_Statistics, kSnooper_SharedMemSize, IPC_CREAT | 0666)) < 0) { 
-            CcspTraceError(("shmget failed while setting up shared memory\n")); 
-
-            perror("shmget");
-            status = STATUS_FAILURE;
-            break;
+            if (errno == EEXIST || errno == EINVAL)
+            {
+                // The key already exists in shared memory. We will try to delete and re-create
+                if (true == deleteSharedMem(kSnooper_Statistics, true))
+                {
+                    if ((gShm_snoop_fd = shmget(kSnooper_Statistics, kSnooper_SharedMemSize, IPC_CREAT | 0666)) < 0) {
+                        perror("shmget");
+                        status = STATUS_FAILURE;
+                        CcspTraceError(("shmget failed while setting up snooper shared memory\n")); 
+                        break;
+                    }
+                } else {
+                    perror("delete shared memory failed");
+                    CcspTraceError(("Failed while trying to delete existing snooper shared memory\n")); 
+                    status = STATUS_FAILURE;
+                    break;
+                }
+            } else {
+                // other error besides "already exists" or "wrong size"
+                perror("shmget");
+                status = STATUS_FAILURE;
+                CcspTraceError(("shmget failed while setting up snooper shared memory: %d\n", errno)); 
+                break;
+            }
         }
 
         // Attach the segment to our data space.
         if ((gpSnoop_Stats = (snooper_statistics_s *)shmat(gShm_snoop_fd, NULL, 0)) == (snooper_statistics_s *) -1) {
-            CcspTraceError(("shmat failed whiler setting up shared memory\n")); 
+            CcspTraceError(("shmat failed while setting up snooper shared memory segment\n")); 
 
             perror("shmat");
 
