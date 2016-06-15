@@ -78,10 +78,8 @@
 #include <limits.h>
 
 #include "dhcp.h"
-#include "debug.h"
-#include "dhcpsnooper.h"
-#include "lm_api.h"
 #include "ccsp_trace.h"
+#include "debug.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 1024
@@ -230,5 +228,6 @@ typedef struct
 #define DNSMASQ_LEASES_FILE 		  "/nvram/dnsmasq.leases"
 
 void *dhcp_snooper_init(void *); 
-void *snoop_mac_handler(void *);
+void updateRssiForClient(char* pRemote_id, int rssi);
+void snoop_RemoveClientListEntry(char *pRemote_id);
 #endif

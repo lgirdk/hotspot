@@ -122,4 +122,5 @@ typedef struct
 #define kKeepAlive_Statistics           765889 // key used for shared memory
 #define kKeepAlive_SharedMemSize        sizeof(hotspotfd_statistics_s)
 
+void hotspot_start();
 #endif

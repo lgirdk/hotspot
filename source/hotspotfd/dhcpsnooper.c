@@ -129,32 +129,6 @@ static enum agent_relay_mode_t snoop_getDhcpRelayAgentMode( )
 }
 #endif
 
-static void snoop_AddClientListRSSI(int rssi, char *pRemote_id)
-{
-    snooper_priv_client_list * pNewClient;
-    struct mylist_head * pos, * q;
-    bool already_in_list = false;
-
-    mylist_safe(pos, q, &gSnoop_ClientList.list) {
-
-         pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
-         if(!strcmp(pNewClient->client.remote_id, pRemote_id)) {
-             already_in_list = true;
-             break;
-         }
-    }
-
-    if(already_in_list) {
-   
-        pNewClient->client.rssi = rssi;
-        strcpy(pNewClient->client.dhcp_status, "ACK");
-
-        msg_debug("Added to client list:\n");
-        msg_debug("rssi: %d\n", pNewClient->client.rssi);
-    } 
-    
-}
-
 static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int queue_number)
 {
     snooper_priv_client_list * pNewClient;
@@ -181,34 +155,6 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
 	{
 		strcpy(g_cHostnameForQueue[queue_number], pHostname);	
 	}
-}
-
-static void snoop_AddClientListAddress(char *pIpv4_addr, char *pRemote_id, char *pCircuit_id)
-{
-    snooper_priv_client_list * pNewClient;
-    struct mylist_head * pos, * q;
-    bool already_in_list = false;
-
-    mylist_safe(pos, q, &gSnoop_ClientList.list) {
-
-         pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
-         if(!strcmp(pNewClient->client.remote_id, pRemote_id)) {
-             already_in_list = true;
-             break;
-         }
-    }
-
-    if(already_in_list) {
-   
-        strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
-        
-        msg_debug("Added to client list:\n");
-        msg_debug("ipv4_addr: %s\n", pNewClient->client.ipv4_addr);
-
-        strcpy(pNewClient->client.circuit_id, pCircuit_id);
-        msg_debug("pCircuit_id: %s\n", pNewClient->client.circuit_id);
-    } 
-    
 }
 
 static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number) {
@@ -258,14 +204,6 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                 } else {
                     padding = NULL;
 
-        #ifdef __GET_REQUESTED_IP_ADDRESS__
-                    /* Add the request IP address to the client list */
-                    if (*option == DHO_DHCP_REQUESTED_ADDRESS) {
-                        inet_ntop(AF_INET, &(option[2]), addr_str, INET_ADDRSTRLEN);
-                        snoop_AddClientListAddress(addr_str, gRemote_id, gCircuit_id);
-                    }
-        #endif
-
                     /* Add the hostname to the client list */
                     if (*option == DHO_HOST_NAME) {
                         memcpy(host_str, &option[2], option[1]);
@@ -295,14 +233,6 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     length = 0;
                 } else {
                     padding = NULL;
-
-        #ifdef __GET_REQUESTED_IP_ADDRESS__
-                    /* Add the request IP address to the client list */
-                    if (*option == DHO_DHCP_REQUESTED_ADDRESS) {
-                        inet_ntop(AF_INET, &(option[2]), addr_str, INET_ADDRSTRLEN);
-                        snoop_AddClientListAddress(addr_str, gRemote_id, gCircuit_id);
-                    }
-        #endif
 
                     /* Add the hostname to the client list */
                     if (*option == DHO_HOST_NAME) {
@@ -336,13 +266,6 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     } else {
                         padding = NULL;
 
-        #ifdef __GET_REQUESTED_IP_ADDRESS__
-                        /* Add the request IP address to the client list */
-                        if (*option == DHO_DHCP_REQUESTED_ADDRESS) {
-                            inet_ntop(AF_INET, &(option[2]), addr_str, INET_ADDRSTRLEN);
-                            snoop_AddClientListAddress(addr_str, gRemote_id, gCircuit_id);
-                        }
-        #endif
                         /* Add the hostname to the client list */
                         if (*option == DHO_HOST_NAME) {
                             memcpy(host_str, &option[2], option[1]);
@@ -389,14 +312,6 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     length = 0;
                 } else {
                     padding = NULL;
-
-        #ifdef __GET_REQUESTED_IP_ADDRESS__
-                    /* Add the request IP address to the client list */
-                    if (*option == DHO_DHCP_REQUESTED_ADDRESS) {
-                        inet_ntop(AF_INET, &(option[2]), addr_str, INET_ADDRSTRLEN);
-                        snoop_AddClientListAddress(addr_str, gRemote_id, gCircuit_id);
-                    }
-        #endif
 
                     /* Add the hostname to the client list */
                     if (*option == DHO_HOST_NAME) {
@@ -659,7 +574,7 @@ void snoop_log(void)
     }
 }
 
-static void snoop_RemoveClientListEntry(char *pRemote_id)
+void snoop_RemoveClientListEntry(char *pRemote_id)
 {
     bool already_in_list = false;
     struct mylist_head * pos, * q;
@@ -668,7 +583,7 @@ static void snoop_RemoveClientListEntry(char *pRemote_id)
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
-         if(!strcmp(pNewClient->client.remote_id, pRemote_id)) {
+         if(!strcasecmp(pNewClient->client.remote_id, pRemote_id)) {
              already_in_list = true;
              break;
          }
@@ -683,6 +598,7 @@ static void snoop_RemoveClientListEntry(char *pRemote_id)
 
         msg_debug("Removed from client list: %s\n", pRemote_id);
         msg_debug("Number of clients: %d\n", gSnoopNumberOfClients); 
+		snoop_log();
     }
 }
 
@@ -720,7 +636,7 @@ static void snoop_CheckClientIsPrivate(char *pRemote_id)
 }
 
 static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id, 
-                                  char *pDhcp_status, char *pIpv4_addr, char *pHostname)
+                                  char *pDhcp_status, char *pIpv4_addr, char *pHostname, int rssi)
 {
     snooper_priv_client_list * pNewClient;
     struct mylist_head * pos, * q;
@@ -729,7 +645,7 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
-         if(!strcmp(pNewClient->client.remote_id, pRemote_id)) {
+         if(!strcasecmp(pNewClient->client.remote_id, pRemote_id)) {
              already_in_list = true;
              break;
          }
@@ -740,33 +656,38 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
         if(gSnoopNumberOfClients < gSnoopMaxNumberOfClients) { 
     
             pNewClient= (snooper_priv_client_list *)malloc(sizeof(snooper_priv_client_list));
+			memset(pNewClient, 0x00, sizeof(pNewClient));
 
-            strcpy(pNewClient->client.remote_id, pRemote_id);
-            strcpy(pNewClient->client.circuit_id, pCircuit_id);
-            strcpy(pNewClient->client.dhcp_status, pDhcp_status);
-            strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
-            strcpy(pNewClient->client.hostname, pHostname);
-            pNewClient->client.rssi = 0;
-			pNewClient->client.noOfTriesForOnlineCheck = 0;
-
+			if (NULL == pCircuit_id)
+			{
+				strcpy(pNewClient->client.remote_id, pRemote_id);
+			}
+			else
+			{
+				strcpy(pNewClient->client.remote_id, pRemote_id);
+    	        strcpy(pNewClient->client.circuit_id, pCircuit_id);
+        	    strcpy(pNewClient->client.dhcp_status, pDhcp_status);
+            	strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
+	            strcpy(pNewClient->client.hostname, pHostname);
+			}
+            pNewClient->client.rssi = rssi;
+            pNewClient->client.noOfTriesForOnlineCheck = 0; 
             mylist_add(&pNewClient->list, &gSnoop_ClientList.list);
             gSnoopNumberOfClients++;
-
-            msg_debug("Added to client list:\n");
-            msg_debug("remote_id: %s\n", pNewClient->client.remote_id);
-            msg_debug("circuit_id: %s\n", pNewClient->client.circuit_id);
-            msg_debug("dhcp_status: %s\n", pNewClient->client.dhcp_status);
-            msg_debug("ipv4_addr: %s\n", pNewClient->client.ipv4_addr);
-            msg_debug("hostname: %s\n", pNewClient->client.hostname);
-            msg_debug("rssi: %d\n", pNewClient->client.rssi);
-
-            msg_debug("gSnoopNumberOfClients: %d\n", gSnoopNumberOfClients);
 
         } else {
             CcspTraceError(("Max. number of clients %d already in list\n", gSnoopNumberOfClients));
         }
     } else {
         msg_debug("Client %s already in list.\n", pRemote_id);
+		if ((NULL != pCircuit_id && '\0' != pCircuit_id[0]))
+		{
+			strcpy(pNewClient->client.remote_id, pRemote_id);
+            strcpy(pNewClient->client.circuit_id, pCircuit_id);
+            strcpy(pNewClient->client.dhcp_status, pDhcp_status);
+            strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
+            strcpy(pNewClient->client.hostname, pHostname);
+		}
     }
     
 }
@@ -868,23 +789,6 @@ static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned le
                 return(0);
 
             end_pad = NULL;
-
-#ifdef __GET_REQUESTED_IP_ADDRESS__
-            /* Add the request IP address to the client list */
-            if(*op == DHO_DHCP_REQUESTED_ADDRESS) {
-                inet_ntop(AF_INET, &(op[2]), addr_str, INET_ADDRSTRLEN);
-                snoop_AddClientListAddress(addr_str, gRemote_id, gCircuit_id);
-            }
-#endif          
-
-            /* Add the hostname to the client list */
-            if(*op == DHO_HOST_NAME) {
-                memcpy(host_str, &op[2], op[1]); 
-                host_str[op[1]] = '\0';
-                
-                snooper_dbg("host_str: %s\n", host_str);                
-                snoop_AddClientListHostname(host_str, gRemote_id, queue_number);
-            }
 
             if (sp != op) {
                 memmove(sp, op, op[1] + 2);
@@ -1175,7 +1079,7 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 					}
 				}
 				strcpy(l_cHostName, g_cHostnameForQueue[queue_number]);
-				snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName);
+				snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName, 0);
                 snoop_CheckClientIsPrivate(gRemote_id);  
         	}
     	    snoop_log();
@@ -1190,487 +1094,27 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     }
 }
 
-#ifdef __USE_LM_HANDLER__
-static int mac_string_to_array(char *pStr, unsigned char array[6])
+void updateRssiForClient(char* pRemote_id, int rssi)
 {
-    int tmp[6],n,i;
-	if(pStr == NULL)
-		return -1;
-		
-    memset(array,0,6);
-    n = sscanf(pStr,"%02x:%02x:%02x:%02x:%02x:%02x",&tmp[0],&tmp[1],&tmp[2],&tmp[3],&tmp[4],&tmp[5]);
-    if(n==6){
-        for(i=0;i<n;i++)
-            array[i] = (unsigned char)tmp[i];
-        return 0;
-    }
-
-    return -1;
-}
-
-static void printf_host(LM_host_t *pHost){
-    int i;   
-    LM_ip_addr_t *pIp;
-    char str[100];
-
-    printf("Device %s Mac %02x:%02x:%02x:%02x:%02x:%02x -> \n\t%s mediaType:%d \n", pHost->hostName, pHost->phyAddr[0], pHost->phyAddr[1], pHost->phyAddr[2], pHost->phyAddr[3], pHost->phyAddr[4], pHost->phyAddr[5],(pHost->online == 1 ? "Online" : "offline"), pHost->mediaType);
-    printf("\tL1 interface %s, L3 interface %s comments %s RSSI %d\n", pHost->l1IfName, pHost->l3IfName, pHost->comments, pHost->RSSI);
-    printf("\tIPv4 address list:\n");
-    for(i = 0; i < pHost->ipv4AddrAmount ;i++){
-        pIp = &(pHost->ipv4AddrList[i]);
-        inet_ntop(AF_INET, pIp->addr, str, 100);
-        printf("\t\t%d. %s %d\n", i+1, str, pIp->addrSource);
-    }
-    printf("IPv6 address list:\n");
-    for(i = 0; i < pHost->ipv6AddrAmount ;i++){
-        pIp = &(pHost->ipv6AddrList[i]);
-        inet_ntop(AF_INET6, pIp->addr, str, 100);
-        printf("\t\t%d. %s %d\n", i+1, str, pIp->addrSource);
-    }
-}
-
-static void *snoop_mac_handler(void *data)
-{
-    unsigned char mac[6];
-    LM_cmd_common_result_t result;
-    char tmp[18];
-    struct mylist_head * pos, * q;
-    snooper_priv_client_list * pClient;
-    int status;
-
-    for (;;) {
-
-        mylist_safe(pos, q, &gSnoop_ClientList.list) {
-
-            pClient= mylist_entry(pos, snooper_priv_client_list, list);
-
-            strncpy(tmp, pClient->client.remote_id, 17);
-            tmp[18] = '\0';
-
-            mac_string_to_array(tmp, mac);
-
-            msg_debug("Checking client mac: %s\n", tmp);
-
-            memset(&result, 0, sizeof(result));
-            status = lm_get_host_by_mac((char *)mac, &result);
-
-            if(status != -1) {
-                if (result.result == LM_CMD_RESULT_OK) {
-
-                    //printf_host(&(result.data.host));
-
-                    if(result.data.host.online) {
-                        msg_debug("lm_get_host_by_mac: client mac online: %s\n", tmp);
-                    } else {
-
-                        msg_debug("lm_get_host_by_mac: client mac offline: %s\n", tmp);
-                        snoop_RemoveClientListEntry(pClient->client.remote_id);
-                    }
+	bool already_in_list = false;
+    struct mylist_head * pos, * q; 
+    snooper_priv_client_list * pNewClient;
     
-                } else if(result.result == LM_CMD_RESULT_NOT_FOUND) {
-
-                    msg_debug("lm_get_host_by_mac: client mac not found: %s\n", tmp);
-                    snoop_RemoveClientListEntry(pClient->client.remote_id);
-
-                } else {
-                    msg_err("lm_get_host_by_mac: error: %d\n", result.result);
-                }
-
-                snoop_log();
-            }
-        }
-
-        msg_debug("sleeping %d secs.\n", kSnoop_LM_Delay);
-        sleep(kSnoop_LM_Delay);
-        
-    }
-
-    return 0;
-}
-#else
-
-static char buffer[128];
-char *g_cBuffer[5] = {"/fss/gw/usr/ccsp/ccsp_bus_client_tool", "eRT", "getvalues"};
-typedef struct {
-    char mac[18];
-    int rssi;
-} snooper_assoc_client_list;
-
-static snooper_assoc_client_list gclient_data[kSnoop_MaxNumAssociatedDevices];
-
-void sigquit()
-{
-    CcspTraceError(("Inside sigquit terminating child now\n"));
-    _exit(1);
-}
-
-void killChild(pid_t childPid)
-{
-    if (!kill(childPid, SIGQUIT))
-    {
-        CcspTraceInfo(("Kill of:%d is successful!!! \n", childPid));
-    }
-    else
-    {
-        CcspTraceError(("Kill of:%d is not successful!!! error is:%d\n", childPid, errno));
-    }
-}
-
-static pid_t popen2(const char **cmd, int *output_fp)
-{
-    int p_stdin[2], p_stdout[2];
-    int exit_status, i, l_icloseStatus;
-    bool l_bCloseFp = false;
-
-    pid_t pid, endID;
-    if (pipe(p_stdin) != 0 || pipe(p_stdout) != 0)
-        return -1;
-    pid = fork();
-    if (pid < 0)
-        return pid;
-    else if (pid == 0)
-    {
-        signal(SIGQUIT, sigquit);
-        close(p_stdin[WRITE]);
-        dup2(p_stdin[READ], READ);
-        close(p_stdout[READ]);
-        dup2(p_stdout[WRITE], WRITE);
-
-        close(p_stdout[WRITE]);
-        close(p_stdin[READ]);
-
-		execvp(*cmd, cmd);
-        perror("execvp");
-        _exit(1);
-    }
-
-    close(p_stdin[READ]);
-    close(p_stdout[WRITE]);
-    close(p_stdin[WRITE]);
-
-    if (output_fp == NULL)
-        close(p_stdout[READ]);
-    else
-        *output_fp = p_stdout[READ];
-
-	for(i = 0; i < 10; i++) 
-    {
-        endID = waitpid(pid, &exit_status, WNOHANG|WUNTRACED);
-        if (endID == -1) {            /* error calling waitpid       */
-            perror("waitpid error");
-            CcspTraceInfo(("waitPid Error:%d\n", errno));
-            l_bCloseFp = true;
-            break;
-        }
-        else if (endID == 0) {        /* child still running         */
-            msg_debug("Parent waiting for child\n");
-            sleep(1);
-        }
-        else if (endID == pid) {  /* child ended                 */
-            if (WIFEXITED(exit_status))
-            { 
-                msg_debug("Child ended normally \n");
-            }
-            else if (WIFSIGNALED(exit_status))
-            {
-                CcspTraceInfo(("Child ended because of an uncaught signal \n", exit_status));
-                l_bCloseFp = true;
-			}
-            else if (WIFSTOPPED(exit_status))
-            {
-                CcspTraceInfo(("Child process has stopped \n", exit_status));
-                l_bCloseFp = true;
-            }
-            break;
-        }
-    }
-    if (0 == endID)
-    {
-        CcspTraceInfo(("ccsp_bus_client_tool process:%d hung killing it\n", pid));
-        killChild(pid);
-        while (0 == waitpid(pid, &exit_status, WNOHANG|WUNTRACED))
-        {
-            sleep(2);
-            CcspTraceError(("Child hasn't exited even after 2 sec \n"));
-        }
-        l_icloseStatus = close(*output_fp);
-        if (CLOSE_ERR == l_icloseStatus)
-            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
-
-        CcspTraceError(("Child has exited, exit status is:%d\n", exit_status));
-        return NULL;
-    }
-    if (true == l_bCloseFp)
-    {
-        l_icloseStatus = close(*output_fp);
-        if (CLOSE_ERR == l_icloseStatus)
-            CcspTraceInfo(("Error while closing output fp in popen2: %d\n", l_icloseStatus));
-
-        return NULL;
-    }
-    msg_debug("popen2 pid for executing the command:%s is:%d exit_status is:%d\n", cmd, pid, exit_status);
-    return pid;
-}
-
-static int snoop_getNumAssociatedDevicesPerSSID(int index)
-{
-    FILE *fp;
-    char path[PATH_MAX];
-    char *pch;
-	int read_bytes, num_devices = 0, l_iOutputfp;
-	pid_t l_busClientPid;
-    int l_iFlags;
-
-    memset(path, 0x00, sizeof(path));
-    sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDeviceNumberOfEntries", index); 
-	g_cBuffer[3] = buffer;
-	g_cBuffer[4] = NULL;
-
-	l_busClientPid = popen2(g_cBuffer, &l_iOutputfp);
-	
-	if(NULL == l_busClientPid)
-		return num_devices;	
-
-    l_iFlags = fcntl(l_iOutputfp, F_GETFL, 0);
-    if (fcntl(l_iOutputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
-        CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
-    }
-	read_bytes = read(l_iOutputfp, path, (PATH_MAX-1));
-	if (READ_ERR != read_bytes)
-	{	
-		msg_debug("Read is successful while getting number of devices bytes read:%d\n", read_bytes);
-		pch = strstr(path, "ue:");
-	    if (pch) { 
-   			num_devices = atoi(&pch[4]);
-
-        	if(num_devices > kSnoop_MaxNumAssociatedDevices) {
-        		CcspTraceError(("num_devices :%d exceeds max. value:%d\n", num_devices, kSnoop_MaxNumAssociatedDevices));
-	            num_devices = kSnoop_MaxNumAssociatedDevices;
-    	    }
-        	msg_debug("num_devices: %d\n", num_devices);
-	    }
-	}
-    else if (0 == read_bytes)
-    {
-        CcspTraceError(("EOF detected while reading number of devices\n"));
-		return num_devices;
-    }
-    else if (EAGAIN == errno) //Nothing to read from the pipe
-    {
-        CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
-    }
-	else //read error case -1 is returned
+    mylist_safe(pos, q, &gSnoop_ClientList.list) 
 	{
-		CcspTraceError(("Read is un-successful Associated Devices error is:%d\n", errno));		
+         pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
+         if(!strcasecmp(pNewClient->client.remote_id, pRemote_id)) {
+             already_in_list = true;
+             msg_debug("Client :%s is present update only rssi \n", pRemote_id);
+			 pNewClient->client.rssi = rssi;
+         }
+    }
+	if (false == already_in_list)	
+	{
+		msg_debug("Client :%s is not present Add to the clientlist\n", pRemote_id);
+		snoop_AddClientListEntry(pRemote_id, NULL, NULL, NULL, NULL, rssi);
 	}
-	close(l_iOutputfp);
-    return num_devices;
 }
-
-static int snoop_getAssociatedDevicesData(int index, int num_devices, int start_index)
-{
-    int status = 0;
-    FILE *fp;
-    char path[PATH_MAX];
-    char *pch;
-    char mac[18];
-    int i, j, k = start_index, rssi;
-	int read_bytes, l_outputfp, l_icloseStatus;
-    pid_t l_busClientPid;
-    int l_iFlags;
-
-    memset(path, 0x00, sizeof(path));
-    // Get MAC addresses of associated clients
-    for(i=1; i <= num_devices; i++) {
-
-       sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.MACAddress", index, i); 
-		g_cBuffer[3] = buffer;
-		g_cBuffer[4] = NULL;
-		
-	    l_busClientPid = popen2(g_cBuffer, &l_outputfp);
-			
-		if (NULL == l_busClientPid)
-            continue;
- 
-        l_iFlags = fcntl(l_outputfp, F_GETFL, 0);
-        if (fcntl(l_outputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
-            CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
-        }
-    	read_bytes = read(l_outputfp, path, (PATH_MAX-1));
-		if (READ_ERR != read_bytes)
-		{	
-			msg_debug("Read is successful while getting MAC bytes read:%d\n", read_bytes);
-	    	pch = strstr(path, "ue:");
-			if (pch) { 
-                strncpy(mac, &pch[4], 17); 
-	    	    mac[17] = '\0';
-            	for(j=0; j<= strlen(mac); j++) {
-	            	 mac[j] = tolower(mac[j]);
-	            }
-
-    	        msg_debug("mac: %s\n", mac);
-        	    if(k < kSnoop_MaxNumAssociatedDevices) {
-           			strcpy(gclient_data[k++].mac, mac);
-	            } else {
-    	        	CcspTraceError(("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices));
-            	}
-        	}
-		}
-        else if (0 == read_bytes)
-        {
-            CcspTraceError(("EOF detected while getting MAC address of the connected device\n"));
-		    continue;
-        }
-        else if (EAGAIN == errno) //Nothing to read from the pipe
-        {
-            CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
-        }
-		else //read error case -1 is returned
-		{
-			CcspTraceError(("Read is un-successful getting MAC error is:%d\n", errno));		
-		}
-    	close(l_outputfp);
-    }
-
-    // Get RSSI level of associated clients
-    k = start_index;
-    for(i=1; i <= num_devices; i++) {
-
-		sprintf(buffer, "Device.WiFi.AccessPoint.%d.AssociatedDevice.%d.SignalStrength", index, i);
-		g_cBuffer[3] = buffer;
-        g_cBuffer[4] = NULL;
-		
-		l_busClientPid = popen2(g_cBuffer, &l_outputfp);
-		if (NULL == l_busClientPid)
-            continue;
-
-        l_iFlags = fcntl(l_outputfp, F_GETFL, 0);
-        if (fcntl(l_outputfp, F_SETFL, l_iFlags | O_NONBLOCK) != 0 ) {
-            CcspTraceError(("Failed to set pipe to non blocking mode :%d\n", errno));
-        }
-        read_bytes = read(l_outputfp, path, (PATH_MAX-1));
-		if (READ_ERR != read_bytes)
-		{	
-			msg_debug("Read is successful while getting RSSI bytes read:%d\n", read_bytes);
-			pch = strstr(path, "ue:");
-	        if (pch) {
-				rssi = atoi(&pch[4]);
-        	    msg_debug("rssi: %d\n", rssi);
-            	if(k < kSnoop_MaxNumAssociatedDevices) {
-        	    	gclient_data[k++].rssi = rssi;
-	            } else {
-    	        	CcspTraceError(("Exceeded max. allowed clients (%d)\n", kSnoop_MaxNumAssociatedDevices));
-        	    }
-        	}
-		}
-        else if (0 == read_bytes)
-        {
-            CcspTraceError(("EOF detected while getting RSSI of the connected device\n"));
-		    continue;
-        }
-        else if (EAGAIN == errno) //Nothing to read from the pipe
-        {
-            CcspTraceInfo(("Nothing to read from the pipe:%d\n", errno));
-        }
-		else //read error case -1 is returned
-		{
-			CcspTraceError(("Read is un-successful getting RSSI error is:%d\n", errno));		
-		}
-        close(l_outputfp);
-    }
-    return status;
-}
-
-static int snoop_getAllAssociatedDevicesData(void)
-{
-    int i, start_index = 0;
-    int num_devices;
-
-    memset(gclient_data, 0, sizeof(gclient_data)); 
-
-    for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues + gSnoopFirstQueueNumber; i++) {
-        num_devices = snoop_getNumAssociatedDevicesPerSSID(gSnoopSSIDListInt[i]);
-
-        if(num_devices) {
-            snoop_getAssociatedDevicesData(gSnoopSSIDListInt[i], num_devices, start_index);
-            start_index += num_devices;
-        }
-    }
-
-    return start_index;
-}
-
-static bool snoop_IsMacInList(int num_devices, char * pRemote_id)
-{
-    int i;
-    bool inList = false;
-
-    msg_debug("Checking for mac: %s\n", pRemote_id);
-    msg_debug("num_devices: %d\n", num_devices);
-
-    for(i=0; i< num_devices; i++) {
-
-        msg_debug("gclient_data[%d].mac: %s  pRemote_id: %s\n", i, gclient_data[i].mac, pRemote_id);
-
-        if(!strcmp(gclient_data[i].mac, pRemote_id)) {
-            msg_debug("Found mac: %s\n", gclient_data[i].mac);
-
-            snoop_AddClientListRSSI(gclient_data[i].rssi, pRemote_id);
-
-            inList = true;
-            break;
-        }
-    }
-
-    return inList;
-}
-
-void *snoop_mac_handler(void *data)
-{ 
-    int num_devices;
-    struct mylist_head * pos, * q;
-    snooper_priv_client_list * pClient;
-
-    for (;;) {
-
-        if (gSnoopEnable) {
-
-			/*This loop is to update the associated devices list. If there are no devices connected to hotspot
-            we can avoid running of this loop*/
-            if(gSnoopNumberOfClients > 0) { 
-            // Get the total number of associated devices
-            // on all public SSID's
-            num_devices = snoop_getAllAssociatedDevicesData();
-
-            mylist_safe(pos, q, &gSnoop_ClientList.list) {
-
-                pClient= mylist_entry(pos, snooper_priv_client_list, list);
-
-                if (snoop_IsMacInList(kSnoop_MaxNumAssociatedDevices, pClient->client.remote_id) == false) {
-					pClient->client.noOfTriesForOnlineCheck++;
-					//Since there is a delay in updation of Wifi object AssociatedDevices, there is inconsistency in hot spot client list. 
-					//Checking for mutiple times before removing the client from hot spot client list.
-					if(pClient->client.noOfTriesForOnlineCheck > MAX_NUM_TRIES ) {
-		                snoop_RemoveClientListEntry(pClient->client.remote_id);
-		                msg_debug("Removed mac: %s from client list\n", pClient->client.remote_id);
-					} 
-                } else {
-					//reset the count to Zero.
-					pClient->client.noOfTriesForOnlineCheck = 0;
-				}
-				
-            }
-
-            snoop_log();
-            msg_debug("sleeping %d secs.\n", kSnoop_LM_Delay);
-		}	
-            sleep(kSnoop_LM_Delay);
-        }
-    }
-
-    return 0;
-}
-#endif
 
 void *dhcp_snooper_init(void *data)
 {
@@ -1679,7 +1123,7 @@ void *dhcp_snooper_init(void *data)
     struct nfnl_handle *netlinkHandle;
     int status; 
     int fd, res, i, j=0;
-    char buf[4096];		
+    char buf[4096];
 
     // Get a queue connection handle
     if (!(nfqHandle = nfq_open())) {
