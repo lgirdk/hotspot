@@ -16,4 +16,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = arp_solicitation hotspotfd snooperd
+SUBDIRS = arp_solicitation hotspotfd

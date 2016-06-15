@@ -568,7 +568,7 @@ static void *hotspotfd_sysevent_handler(void *data)
     }
 
     for (;;) {
-        char name[25], val[20];
+        char name[25], val[100];
         int namelen = sizeof(name);
         int vallen  = sizeof(val);
         int err;
@@ -1137,7 +1137,7 @@ static void hotspotfd_usage(void)
     exit(0);
 }
 
-int main(int argc, char *argv[])
+void hotspot_start()
 {
     int cmd;
     bool run_in_foreground = false;
@@ -1147,124 +1147,10 @@ int main(int argc, char *argv[])
 	time_t currentTime ;
 	int timeElapsed;
 
-	rdk_logger_init(DEBUG_INI_NAME);
-   	pComponentName = "hotspotfd";
-
-    strcpy(gKeepAliveInterface, "none");
-
-    while ((cmd = getopt(argc, argv, "e:p:s:i:t:m:l:n:f::h::")) != -1) {
-        switch (cmd) {
-        case 'n':
-
-            if (optarg && (strlen(optarg) >= 2) && (strlen(optarg) < kMax_InterfaceLength)) {
-                strcpy(gKeepAliveInterface, optarg);
-            } else {
-
-				CcspTraceError(("Invalid network interface not bringing hotspotfd up\n"));
-                exit(0);
-            }
-
-            break;
-        case 'e':
-
-            if (atoi(optarg) == 0) {
-                gKeepAliveEnable = false;
-                CcspTraceError(("Keep alive enable is false, ICMP ping wont be sent\n"));
-            } else {
-                gKeepAliveEnable = true;
-            }
-
-            break;
-        case 'l':
-
-            if (atoi(optarg) == 0) {
-                gKeepAliveLogEnable = false;
-            } else {
-                gKeepAliveLogEnable = true;
-            }
-
-            break;
-        case 'p': // Primary EP
-            if (hotspotfd_isValidIpAddress(optarg)) {
-                strcpy(gpPrimaryEP, optarg);
-            } else {
-
-                printf("Invalid Primary IP Address\n");
-                printf("Assuming URI...\n");
-
-                if ((strlen(optarg) < kMax_IPAddressLength) && strchr(optarg, '.')) {
-                    strcpy(gpPrimaryEP, optarg);
-                } else {
-				    CcspTraceError(("Invalid Primary IP Address provided not bringing hotspotfd up\n"));
-                    exit(0);
-                }
-            }
-            break;
-
-        case 's': // Secondary EP
-            if (hotspotfd_isValidIpAddress(optarg)) {
-                strcpy(gpSecondaryEP, optarg);
-            } else {
-                printf("Invalid Secondary IP Address\n");
-                printf("Assuming URI...\n");
-
-                if ((strlen(optarg) < kMax_IPAddressLength) && strchr(optarg, '.')) {
-                    strcpy(gpSecondaryEP, optarg);
-                } else {
-				    CcspTraceError(("Invalid Secondary IP Address provided not bringing hotspotfd up\n"));
-                    exit(0);
-                }
-            }
-            break;
-
-        case 'i':  // Keep alive interval
-            gKeepAliveInterval = atoi(optarg);
-            break;
-
-        case 't':  // Keep alive threshold
-            gKeepAliveThreshold = atoi(optarg);
-            break;
-
-        case 'm': // max. time allowed on Secondary EP
-            gSecondaryMaxTime = atoi(optarg);
-            break;
-
-        case 'f':
-            run_in_foreground = true;
-            break;
-
-        case 'h':
-        default:
-            printf("Unrecognized option '%c'.\n", cmd);
-            hotspotfd_usage();
-        }
-    }
-
-    msg_debug("gpPrimaryEP            : %s\n", gpPrimaryEP);
-    msg_debug("gpSecondaryEP          : %s\n", gpSecondaryEP);
-    msg_debug("run_in_foreground    : %d\n", run_in_foreground); 
-    msg_debug("keep alive enabled   : %d\n", gKeepAliveEnable); 
-    msg_debug("log enabled          : %d\n", gKeepAliveLogEnable); 
-    msg_debug("keep alive interval  : %d\n", gKeepAliveInterval); 
-    msg_debug("keep alive threshold : %d\n", gKeepAliveThreshold); 
-    msg_debug("max secondary        : %d\n", gSecondaryMaxTime); 
-    msg_debug("keep alive count     : %d\n", gKeepAliveCount); 
-    msg_debug("Interface            : %s\n", gKeepAliveInterface); 
-
-
-    if (!run_in_foreground) {
-        msg_debug("Running in background\n");
-
-        if (daemon(0,0) < 0) {
-            CcspTraceWarning(("Failed to daemonize hotspotfd: %s\n", strerror(errno)));
-        }
-
-    } else {
-        msg_debug("Running in foreground\n");
-    }
+    strcpy(gKeepAliveInterface, "erouter0");
+	gKeepAliveEnable = true;
 
 #ifdef __HAVE_SYSEVENT__
-
     sysevent_fd = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, kHotspotfd_events, &sysevent_token);
 
     if (sysevent_fd >= 0) {
@@ -1301,26 +1187,6 @@ int main(int argc, char *argv[])
     CcspTraceInfo(("Hotspotfd process is up\n"));
     system("touch /tmp/hotspotfd_up");
     hotspotfd_log();
-
-#ifdef __HAVE_SYSEVENT__
-    if(pthread_create(&lm_tid, NULL, snoop_mac_handler, NULL))
-    {
-        CcspTraceError(("Call to pthread_create lm_tid failed\n"));
-        exit(1);
-    }
-    {
-        pthread_attr_t attr_snoop_mac_handler;
-        int policy = 0;
-        int min_prio_for_policy = SCHED_RR;
-
-        pthread_attr_init(&attr_snoop_mac_handler);
-        pthread_attr_getschedpolicy(&attr_snoop_mac_handler, &policy);
-
-        min_prio_for_policy = sched_get_priority_min(policy);
-        pthread_setschedprio(lm_tid, min_prio_for_policy);
-    }
-	//pthread_join(lm_tid, status);
-#endif
 
     keep_it_alive:
 

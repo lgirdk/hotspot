@@ -41,23 +41,23 @@
 
 enum
 {
-   LOG_ERR      = 1,
-   LOG_INFO     = 2,
-   LOG_NOISE    = 3
+   LOG_ERR_HOTSPOT      = 1,
+   LOG_INFO_HOTSPOT     = 2,
+   LOG_NOISE_HOTSPOT    = 3
 };
 
 extern unsigned int glog_level;
 
 #define msg_debug(fmt...) {    \
-        if (LOG_NOISE <= glog_level ) {\
+        if (LOG_NOISE_HOTSPOT <= glog_level ) {\
         printf("%s:%d> ", __FUNCTION__, __LINE__); printf(fmt); }}
 
 #define msg_info(fmt...) {    \
-        if (LOG_INFO <= glog_level ) {\
+        if (LOG_INFO_HOTSPOT <= glog_level ) {\
         printf("%s:%d> ", __FUNCTION__, __LINE__); printf(fmt); }}
 
 #define msg_err(fmt...) {    \
-        if (LOG_ERR <= glog_level ) {\
+        if (LOG_ERR_HOTSPOT <= glog_level ) {\
         printf("%s:%d> ", __FUNCTION__, __LINE__); printf(fmt); }}
 
 

@@ -16,10 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-bin_PROGRAMS = hotspotfd
+bin_PROGRAMS = CcspHotspot
 
-AM_CFLAGS = -I$(top_srcdir)/source -I$(top_srcdir)/source/include -I$(top_srcdir)/source/util
+AM_CFLAGS = -I$(top_srcdir)/source 
+AM_CFLAGS += -I$(top_srcdir)/source/include 
+AM_CFLAGS += -I$(top_srcdir)/source/util 
+AM_CFLAGS += -I$(top_srcdir)/source/hotspotfd/include
 
 AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common
-
-hotspotfd_SOURCES = hotspotfd.c dhcpsnooper.c 
+CcspHotspot_SOURCES = hotspotfd.c dhcpsnooper.c ssp_messagebus_interface.c ssp_main.c ssp_action.c cosa_hotspot_dml.c plugin_main.c
