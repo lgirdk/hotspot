@@ -767,12 +767,22 @@ static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned le
                 return(0);
 			
 	    op = nextop;
+	    //>>zqiu: to fix the busy loop
+	    int count=0;
 	    while (*op != DHO_END)
 	    {
+		count++;
+		if(count>1024) {
+			fprintf(stderr, "-- %s busyloop here\n", __func__);
+			msg_debug("%s busyloop here\n", __func__);
+			break;
+		}
 		memmove(sp, op, op[1] + 2);
                 sp += op[1] + 2;
-                op = op[1] + 2;
+                //op = op[1] + 2;
+		op += op[1] + 2;
 	    }
+	    //<<
 	    *(sp) = DHO_END;
             length = length - l_iSkipBytes;
 	    msg_debug("DHCP packet length after option-82 removal is:%d\n", length);
@@ -1167,7 +1177,7 @@ void *dhcp_snooper_init(void *data)
 
     netlinkHandle = nfq_nfnlh(nfqHandle);
     fd = nfnl_fd(netlinkHandle);
-
+    msg_debug("%s fd=%d\n", __func__, fd);
     SET_LIST_HEAD(&gSnoop_ClientList.list);
 
     strcpy(gCircuit_id, kSnoop_DefaultCircuitID);
