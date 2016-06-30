@@ -288,7 +288,7 @@ printf("------- ping >>\n");
     addr = &addr_ping;
 
     sd = socket(PF_INET, SOCK_RAW, proto->p_proto);
-
+	msg_debug("%s sd=%d\n", __func__, sd);
     do {
 
         if ( sd < 0 ) {
@@ -763,8 +763,9 @@ bool deleteSharedMem(int key, bool snooper)
         if(shmds.shm_segsz > 0 && key == shmds.shm_perm.__key) {
             CcspTraceError(("Existing shared memory segment %s found! key: %d size:%d. Deleting!\n",shmidchar, shmds.shm_perm.__key, shmds.shm_segsz));
             if (snooper) {
-                struct snooper_statistics_s *snStats;
-                if ((snStats = (snooper_statistics_s *)shmat(shmid, 0, 0)) == (snooper_statistics_s *)-1)
+                snooper_statistics_s *snStats;
+		        snStats = (snooper_statistics_s *)shmat(shmid, 0, 0);
+                if (snStats == ((snooper_statistics_s *)-1))
                 {
                     perror("shmat error");
                     snStats = NULL;
@@ -776,8 +777,9 @@ bool deleteSharedMem(int key, bool snooper)
                     return false;
                 }
             } else {
-                struct hotspotfd_statistics_s *htStats;
-                if ((htStats = (hotspotfd_statistics_s *)shmat(shmid, 0, 0)) == (hotspotfd_statistics_s *)-1)
+                hotspotfd_statistics_s *htStats;
+		        htStats = (hotspotfd_statistics_s *)shmat(shmid, 0, 0);
+                if (htStats == ((hotspotfd_statistics_s *)-1))
                 {
                     perror("shmat error");
                     htStats = NULL;
