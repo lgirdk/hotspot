@@ -137,6 +137,8 @@ static unsigned int gKeepAliveCount = kDefault_KeepAliveCount;
 #ifdef __HAVE_SYSEVENT__
 static int sysevent_fd;
 static token_t sysevent_token;
+static int sysevent_fd_gs;
+static token_t sysevent_token_gs;
 static pthread_t sysevent_tid;
 #endif
 
@@ -445,6 +447,7 @@ static void hotspotfd_SignalHandler(int signo)
 #ifdef __HAVE_SYSEVENT__
     msg_debug("Closing sysevent and shared memory\n");
     sysevent_close(sysevent_fd, sysevent_token);
+    sysevent_close(sysevent_fd_gs, sysevent_token_gs);
 #endif
 
     close(gShm_fd);
@@ -893,11 +896,12 @@ static int hotspotfd_setupSharedMemory(void)
 static int hotspotfd_getStartupParameters(void)
 {
     int status = STATUS_SUCCESS;
+	int i;
     char buf[kMax_IPAddressLength];
 
     do {
         // Primary EP 
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, kHotspotfd_primary, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, kHotspotfd_primary, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", kHotspotfd_primary, status)); 
             status = STATUS_FAILURE;
             break;
@@ -915,7 +919,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         // Secondary EP
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_secondary, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_secondary, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_secondary, status)); 
             status = STATUS_FAILURE;
             break;
@@ -934,7 +938,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         // Keep Alive Interval
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_keep_alive, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive, status)); 
             status = STATUS_FAILURE;
             break;
@@ -951,7 +955,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         // Keep Alive Threshold
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive_threshold, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_keep_alive_threshold, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_threshold, status)); 
             status = STATUS_FAILURE;
             break;
@@ -969,7 +973,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         // Keep alive Max. Secondary
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_max_secondary, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_max_secondary, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_max_secondary, status)); 
             status = STATUS_FAILURE;
             break;
@@ -987,7 +991,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         // Keep Alive Policy
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive_policy, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_keep_alive_policy, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_policy, status)); 
             status = STATUS_FAILURE;
             break;
@@ -1005,7 +1009,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         // Keep Alive Count
-        if ((status = sysevent_get(sysevent_fd, sysevent_token, khotspotfd_keep_alive_count, buf, sizeof(buf)))) {
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_keep_alive_count, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_keep_alive_count, status)); 
             status = STATUS_FAILURE;
             break;
@@ -1022,12 +1026,9 @@ static int hotspotfd_getStartupParameters(void)
         }
 
 		//DHCP Snooper related
-	    int i;
-
-		CcspTraceInfo(("Inside snoop_getStartupParameters fn sysevent_fd is:%d \n", sysevent_fd));
     	for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues+gSnoopFirstQueueNumber; i++) 
 		{
-        	if((status = sysevent_get(sysevent_fd, sysevent_token, gSnoopSyseventCircuitIDs[i], 
+        	if((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, gSnoopSyseventCircuitIDs[i], 
             	                      gSnoopCircuitIDList[i], kSnoop_MaxCircuitLen))) 
 			{
             	CcspTraceError(("sysevent_get failed to get %s: %d\n", gSnoopSyseventCircuitIDs[i], status)); 
@@ -1049,7 +1050,7 @@ static int hotspotfd_getStartupParameters(void)
 
     	for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues+gSnoopFirstQueueNumber; i++) 
 		{
-	        if((status = sysevent_get(sysevent_fd, sysevent_token, gSnoopSyseventSSIDs[i], 
+	        if((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, gSnoopSyseventSSIDs[i], 
     	                              gSnoopSSIDList[i], kSnoop_MaxCircuitLen))) 
 			{
 	            CcspTraceError(("sysevent_get failed to get %s: %d\n", gSnoopSyseventSSIDs[i], status)); 
@@ -1073,7 +1074,7 @@ static int hotspotfd_getStartupParameters(void)
 
     	if(status == STATUS_SUCCESS) 
 		{
-	        if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_circuit_enable, 
+	        if((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, kSnooper_circuit_enable, 
     	                              buf, kSnoop_max_sysevent_len))) 
 			{
             	CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_circuit_enable, status)); 
@@ -1089,7 +1090,7 @@ static int hotspotfd_getStartupParameters(void)
 
 	    if(status == STATUS_SUCCESS) 
 		{
-	        if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_remote_enable, 
+	        if((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, kSnooper_remote_enable, 
     	                              buf, kSnoop_max_sysevent_len))) 
 			{
 	            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_remote_enable, status)); 
@@ -1105,7 +1106,7 @@ static int hotspotfd_getStartupParameters(void)
 
 	    if(status == STATUS_SUCCESS) 
 		{
-	        if((status = sysevent_get(sysevent_fd, sysevent_token, kSnooper_max_clients, 
+	        if((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, kSnooper_max_clients, 
     	                              buf, kSnoop_max_sysevent_len))) 
 			{
 	            CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_max_clients, status)); 
@@ -1154,19 +1155,20 @@ void hotspot_start()
 
 #ifdef __HAVE_SYSEVENT__
     sysevent_fd = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, kHotspotfd_events, &sysevent_token);
+	sysevent_fd_gs = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, "hotspotfd-gs", &sysevent_token_gs);
 
-    if (sysevent_fd >= 0) {
+    if (sysevent_fd >= 0 && sysevent_fd_gs >= 0) 
+	{
+		CcspTraceInfo(("Socket Descriptors for Hotspot Event handling and Get Set are :%d %d respectively\n", sysevent_fd, sysevent_fd_gs));
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
         if (hotspotfd_getStartupParameters() != STATUS_SUCCESS) {
             CcspTraceError(("Error while getting startup parameters\n"));
-
             hotspotfd_SignalHandler(0);
-
         }
 #endif
         pthread_create(&sysevent_tid, NULL, hotspotfd_sysevent_handler, NULL);
     } else {
-		CcspTraceError(("sysevent_open has failed hotspotfd bring up aborted\n"));
+		CcspTraceError(("sysevent_open for event handling or get set has failed hotspotfd bring up aborted\n"));
         exit(1);
     }
 #endif
@@ -1219,7 +1221,7 @@ Try_primary:
                 if (gbFirstPrimarySignal) {
 					CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));				
 
-                    if (sysevent_set(sysevent_fd, sysevent_token, 
+                    if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                      kHotspotfd_tunnelEP, gpPrimaryEP, 0)) {
 
                         CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
@@ -1269,7 +1271,7 @@ Try_primary:
 
                         gBothDnFirstSignal = false;
 
-                        if (sysevent_set(sysevent_fd, sysevent_token, 
+                        if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                          kHotspotfd_tunnelEP, "\0", 0)) {
 
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
@@ -1334,7 +1336,7 @@ Try_secondary:
                 if (gbFirstSecondarySignal) {
 					CcspTraceInfo(("Create Secondary GRE tunnel with endpoint:%s\n", gpSecondaryEP));
 
-                    if (sysevent_set(sysevent_fd, sysevent_token, 
+                    if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                      kHotspotfd_tunnelEP, gpSecondaryEP, 0)) {
 
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
@@ -1380,7 +1382,7 @@ Try_secondary:
 
                         gBothDnFirstSignal = false;
 
-                        if (sysevent_set(sysevent_fd, sysevent_token, 
+                        if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                          kHotspotfd_tunnelEP, "\0", 0)) {
 
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
