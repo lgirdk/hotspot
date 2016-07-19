@@ -422,56 +422,6 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
     return length;
 }
 
-uint16_t snoop_udpChecksum(uint16_t len_udp, uint16_t * src_addr, uint16_t * dest_addr, uint16_t * buff)
-{
-    uint16_t prot_udp=17;
-    uint16_t padd=0;
-    uint16_t word16;
-    uint32_t sum; 
-    int i;
-
-    // Find out if the length of data is even or odd number. If odd,
-    // add a padding byte = 0 at the end of packet
-#if 0
-    if (padding&1==1) {
-        padd=1;
-        buff[len_udp]=0;
-    }
-#endif
-    //initialize sum to zero
-    sum=0;
-
-    // make 16 bit words out of every two adjacent 8 bit words and 
-    // calculate the sum of all 16 vit words
-    for (i=0;i<len_udp+padd;i=i+2) {
-        word16 =((buff[i]<<8)&0xFF00)+(buff[i+1]&0xFF);
-        sum = sum + (unsigned long)word16;
-    } 
-
-    // add the UDP pseudo header which contains the IP source and destinationn addresses
-    for (i=0;i<4;i=i+2) {
-        word16 =((src_addr[i]<<8)&0xFF00)+(src_addr[i+1]&0xFF);
-        sum=sum+word16; 
-    }
-
-    for (i=0;i<4;i=i+2) {
-        word16 =((dest_addr[i]<<8)&0xFF00)+(dest_addr[i+1]&0xFF);
-        sum=sum+word16;     
-    }
-
-    // the protocol number and the length of the UDP packet
-    sum = sum + prot_udp + len_udp;
-
-    // keep only the last 16 bits of the 32 bit calculated sum and add the carries
-    while (sum>>16)
-        sum = (sum & 0xFFFF)+(sum >> 16);
-
-    // Take the one's complement of sum
-    sum = ~sum;
-
-    return((uint16_t) sum);
-}
-
 uint16_t snoop_ipChecksum(struct iphdr * header)
 {
     // clear existent IP header
@@ -934,20 +884,12 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
         msg_debug("pktData[24]: %02x\n", pktData[24]);
         msg_debug("pktData[25]: %02x\n", pktData[25]);
 
-#ifndef __CALCULATE_UDP_CHECKSUM__
+        /*
+         snoop_udpChecksum function is removed as the UDP Checksum is not added 
+         in any of the DHCP packets, it is always set to zero.
+        */
         // Zero the UDP checksum which is optional
         *(uint16_t *)(pktData+26) = 0;
-#else   
-        {
-            uint16_t len_udp;
-            uint16_t * src_addr = (uint16_t *)&iph->saddr;
-            uint16_t * dest_addr = (uint16_t *)&iph->daddr;
-            uint16_t * buff = (uint16_t *)(pktData+22);
-
-            checksum = snoop_udpChecksum(new_data_len+8, src_addr, dest_addr, buff);
-            msg_debug("udp checksum: %04x\n", checksum);
-        }
-#endif
 
         msg_debug("pktData[24]: %02x\n", pktData[24]);
         msg_debug("pktData[25]: %02x\n", pktData[25]);
@@ -1027,20 +969,13 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     	    msg_debug("pktData[24]: %02x\n", pktData[24]);
         	msg_debug("pktData[25]: %02x\n", pktData[25]);
 
-#ifndef __CALCULATE_UDP_CHECKSUM__
-	        // Zero the UDP checksum which is optional
-    	    *(uint16_t *)(pktData+26) = 0;
-#else   
-        	{
-            	uint16_t len_udp;
-	            uint16_t * src_addr = (uint16_t *)&iph->saddr;
-    	        uint16_t * dest_addr = (uint16_t *)&iph->daddr;
-        	    uint16_t * buff = (uint16_t *)(pktData+22);
+        	/*
+         	 snoop_udpChecksum function is removed as the UDP Checksum is not added 
+         	 in any of the DHCP packets it is always set to zero.
+        	*/
+        	// Zero the UDP checksum which is optional
+        	*(uint16_t *)(pktData+26) = 0;
 
-            	checksum = snoop_udpChecksum(new_data_len-20, src_addr, dest_addr, buff);
-	            msg_debug("udp checksum: %04x\n", checksum);
-    	    }
-#endif
 	        msg_debug("pktData[24]: %02x\n", pktData[24]);
     	    msg_debug("pktData[25]: %02x\n", pktData[25]);
         	msg_debug("new_data_len: %d\n", new_data_len);
