@@ -138,23 +138,18 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
-         if(!strcmp(pNewClient->client.remote_id, pRemote_id)) {
+         if(!strcasecmp(pNewClient->client.remote_id, pRemote_id)) {
              already_in_list = true;
              break;
          }
     }
 
-    if(already_in_list) {
-   
-        strcpy(pNewClient->client.hostname, pHostname);
-        
-        msg_debug("Added to client list:\n");
-        msg_debug("hostname: %s\n", pNewClient->client.hostname);
-    }
-	else
+    if(already_in_list) 
 	{
-		strcpy(g_cHostnameForQueue[queue_number], pHostname);	
-	}
+		CcspTraceInfo(("Client:%s is present update hostname:%s\n", pRemote_id, pHostname));
+        strcpy(pNewClient->client.hostname, pHostname);
+    }
+	strcpy(g_cHostnameForQueue[queue_number], pHostname);	
 }
 
 static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number) {
@@ -638,6 +633,10 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
             strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
             strcpy(pNewClient->client.hostname, pHostname);
 		}
+		else
+		{
+	        pNewClient->client.rssi = rssi;
+		}
     }
     
 }
@@ -1050,8 +1049,8 @@ void updateRssiForClient(char* pRemote_id, int rssi)
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
          if(!strcasecmp(pNewClient->client.remote_id, pRemote_id)) {
              already_in_list = true;
-             msg_debug("Client :%s is present update only rssi \n", pRemote_id);
 			 pNewClient->client.rssi = rssi;
+			 snoop_log();
          }
     }
 	if (false == already_in_list)	
