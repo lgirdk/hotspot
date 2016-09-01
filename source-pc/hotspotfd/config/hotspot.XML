@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<dataModelInfo>
+  <version>1</version>
+  <moduleName>COSA_TR181_USGv2</moduleName>
+  <author></author>
+  <description></description>
+  <library />
+  <objects>
+    <object>
+        <name>X_COMCAST-COM_GRE</name>
+        <objectType>object</objectType>
+        <objects>
+            <object>
+                <name>Tunnel</name>
+                <objectType>object</objectType>
+                <functions>
+                    <func_GetParamStringValue>HotspotConnectedDevice_GetParamStringValue</func_GetParamStringValue>
+                    <func_SetParamStringValue>HotspotConnectedDevice_SetParamStringValue</func_SetParamStringValue>
+                </functions>
+                <parameters>
+                    <parameter>
+                        <name>ClientChange</name>
+                        <type>string</type>
+                        <syntax>string</syntax>
+                        <writable>true</writable>
+                    </parameter>
+                </parameters>
+            </object>
+        </objects>
+    </object>    
+  </objects>
+</dataModelInfo>
