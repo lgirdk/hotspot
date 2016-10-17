@@ -158,9 +158,9 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
     int max_msg_size;
     int circuit_id_len;
     int remote_id_len;
-    unsigned option_length;
-    char addr_str[INET_ADDRSTRLEN];
-    char host_str[kSnooper_MaxHostNameLen];
+    unsigned option_length = 0;  /*RDKB-7435, CID-33355, init before use */
+    char addr_str[INET_ADDRSTRLEN] = {0};
+    char host_str[kSnooper_MaxHostNameLen] = {0};
     u_int8_t * option,*next_option;
 	/* If we're not adding agent options to packets, we can skip
 	   this. */
@@ -772,7 +772,7 @@ static bool snoop_isValidIpAddress(char *ipAddress)
 
 static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *msg,struct nfq_data *pkt, void *cbData) 
 {
-    uint32_t queue_id;
+    uint32_t queue_id = -1; /*RDKB-7435, CID-33527, init before use */
     int queue_number = *(int *)cbData;
     //uint16_t checksum;
     struct nfqnl_msg_packet_hdr *header;
