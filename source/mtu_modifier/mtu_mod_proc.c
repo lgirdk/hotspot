@@ -85,13 +85,12 @@ int extract_nvp_value(char *buffer,char *pKey, char *pValue, int strSize)
 	return(0);
 }
 
-static int mtu_mod_read_proc(char *buffer, char **buffer_location,
-	      off_t offset, int buffer_length, int *eof, void *data)
+static ssize_t mtu_mod_read_proc(struct file *file, char __user *buf, size_t len, loff_t *ppos)
 {
 	return(0);
 }
 
-static int mtu_mod_write_proc(struct file *file, const char __user *buffer, unsigned long count, void *data)
+static ssize_t mtu_mod_write_proc(struct file *file, const char __user *buffer, size_t count, loff_t *data)
 {
 	char brName[32], mtuStr[8],icmpStr[2], segStr[2], ipaddr[16];
 	int len, mtu=0, icmpFlag=0, segFlag=0;

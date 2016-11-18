@@ -43,6 +43,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_bridge.h>
+#include <linux/version.h>
 #include <net/ip.h>
 #include <net/dst.h>
 
@@ -67,12 +68,13 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
 static struct list_head gMtuModBrList;
 static spinlock_t   lock;
 static struct nf_hook_ops mtu_mod_ops={
-        {NULL, NULL},
-        (nf_hookfn *)mtu_mod_hook,
-        THIS_MODULE,
-        PF_BRIDGE,
-        NF_BR_FORWARD, /*before deliver a SKB to the destination port*/
-        NF_BR_PRI_FIRST
+ .hook = (nf_hookfn *)mtu_mod_hook,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,4,0)
+ .owner = THIS_MODULE,
+#endif
+ .pf = PF_BRIDGE,
+ .hooknum = NF_BR_FORWARD,  /*before deliver a SKB to the destination port*/
+ .priority = NF_BR_PRI_FIRST,
 };
 
 extern __sum16 ip_fast_csum(const void *iph, unsigned int ihl);
