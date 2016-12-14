@@ -445,6 +445,10 @@ static void hotspotfd_SignalHandler(int signo)
 {
     msg_debug("Received signal: %d\n", signo);
 
+    if ( signo == SIGTERM ) {
+        CcspTraceInfo(("Hotspotfd process is down and not running\n"));
+    }
+
 #ifdef __HAVE_SYSEVENT__
     msg_debug("Closing sysevent and shared memory\n");
     sysevent_close(sysevent_fd, sysevent_token);
