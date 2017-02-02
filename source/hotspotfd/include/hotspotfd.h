@@ -33,25 +33,6 @@
    limitations under the License.
 **********************************************************************/
 
-// -----------------------------------------------------------------------------
-//
-//                   Copyright 2013 Cisco Systems, Inc.
-//
-//                           5030 Sugarloaf Parkway
-//                               P.O.Box 465447
-//                          Lawrenceville, GA 30042
-//
-//                            CISCO CONFIDENTIAL
-//              Unauthorized distribution or copying is prohibited
-//                            All rights reserved
-//
-// No part of this computer software may be reprinted, reproduced or utilized
-// in any form or by any electronic, mechanical, or other means, now known or
-// hereafter invented, including photocopying and recording, or using any
-// information storage and retrieval system, without permission in writing
-// from Cisco Systems, Inc.
-//
-// -----------------------------------------------------------------------------
 #ifndef __HOTSPOTFD_HEADER__
 #define __HOTSPOTFD_HEADER__
 
