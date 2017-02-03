@@ -567,8 +567,7 @@ static void snoop_CheckClientIsPrivate(char *pRemote_id)
 
     while (fgets(l_cBuf, sizeof(l_cBuf), l_dnsfp)!= NULL)
     {    
-        //ret = sscanf(l_cBuf, "%d %s %s %s", &l_iLeaseTime, l_cDhcpClientAddr, l_cIpAddr, l_cHostName);//LNT_EMU
-        ret = sscanf(l_cBuf, "%s %s %s %d", l_cDhcpClientAddr, l_cIpAddr, l_cHostName , &l_iLeaseTime);
+        ret = sscanf(l_cBuf, "%d %s %s %s", &l_iLeaseTime, l_cDhcpClientAddr, l_cIpAddr, l_cHostName);
         if(ret != 4)
             continue;
 

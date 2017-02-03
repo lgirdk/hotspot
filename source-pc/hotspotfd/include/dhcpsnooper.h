@@ -225,8 +225,7 @@ typedef struct
 
 #define kSnooper_Statistics           865889 // key used for shared memory
 #define kSnooper_SharedMemSize        sizeof(snooper_statistics_s)
-//#define DNSMASQ_LEASES_FILE 		  "/nvram/dnsmasq.leases"//LNT_EMU
-#define DNSMASQ_LEASES_FILE 		  "/tmp/udhcpd.leases"
+#define DNSMASQ_LEASES_FILE 		  "/tmp/dnsmasq.leases"
 
 void *dhcp_snooper_init(void *); 
 void updateRssiForClient(char* pRemote_id, int rssi);
