@@ -103,7 +103,7 @@
 #define kSnooper_MaxCircuitLen  80
 
 #define kSnoop_DefaultQueue             1
-#define kSnoop_DefaultNumberOfQueues    2
+#define kSnoop_DefaultNumberOfQueues    4
 #define kSnoop_MaxNumberOfQueues        4
 
 #define kSnoop_LOG_ERR     1
@@ -121,10 +121,6 @@
 #define kSnoop_DHCP_ACK             5
 #define kSnoop_DHCP_Release         7
 #define kSnoop_DHCP_Inform          8
-
-#define kSnoop_DefaultQueue             1
-#define kSnoop_DefaultNumberOfQueues    2
-#define kSnoop_MaxNumberOfQueues        4
 
 #define SNOOP_LOG_PATH    "/var/tmp/dhcp_snooperd.log"
 #define kSnoop_max_sysevent_len     80
