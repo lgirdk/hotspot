@@ -15,6 +15,9 @@
 **********************************************************************/
 
 #include "dhcpsnooper.h"
+#include "debug.h"
+#include "dhcp.h"
+#include "ccsp_trace.h"
 
 #define mylist_safe(p, q, h) \
          for (p = (h)->n, q = p->n; p != (h); \

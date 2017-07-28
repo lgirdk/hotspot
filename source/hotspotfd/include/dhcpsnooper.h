@@ -58,9 +58,6 @@
 #include <arpa/inet.h>
 #include <limits.h>
 
-#include "dhcp.h"
-#include "ccsp_trace.h"
-#include "debug.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 1024
