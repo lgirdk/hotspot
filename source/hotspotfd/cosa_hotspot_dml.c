@@ -97,6 +97,7 @@ BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* P
 		}	
         return TRUE;
     }
+    return FALSE;
 }
 
 ULONG
