@@ -68,6 +68,8 @@
 #ifndef DHCP_H
 #define DHCP_H
 
+#include <sys/types.h>
+
 #define DHCP_UDP_OVERHEAD	(20 + /* IP header */			\
 			        8)   /* UDP header */
 #define DHCP_SNAME_LEN		64
@@ -78,13 +80,13 @@
 #define BOOTP_MIN_LEN		300
 
 #define DHCP_MTU_MAX		1500
-#define DHCP_MTU_MIN        576
+#define DHCP_MTU_MIN		576
 
 #define DHCP_MAX_OPTION_LEN	(DHCP_MTU_MAX - DHCP_FIXED_LEN)
 #define DHCP_MIN_OPTION_LEN     (DHCP_MTU_MIN - DHCP_FIXED_LEN)
 
 struct dhcp_packet {
- u_int8_t  op;		/* 0: Message opcode/type */
+	u_int8_t  op;		/* 0: Message opcode/type */
 	u_int8_t  htype;	/* 1: Hardware addr type (net/if_types.h) */
 	u_int8_t  hlen;		/* 2: Hardware addr length */
 	u_int8_t  hops;		/* 3: Number of relay agent hops from client */
