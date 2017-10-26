@@ -45,13 +45,14 @@
 #include <sys/select.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <netinet/if_ether.h>
 #include <linux/if_ether.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
 #include <linux/filter.h>
 #include <linux/if.h>
 #include <linux/ip.h>
-#include <linux/if_arp.h>
+#include <net/if_arp.h>
 #include <linux/netfilter.h>
 #include <linux/types.h>
 #include <netinet/in.h>
