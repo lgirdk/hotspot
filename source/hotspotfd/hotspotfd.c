@@ -380,6 +380,24 @@ printf("------------------ %s \n", __func__);
     return  _hotspotfd_ping(address);
 }
 
+#if defined(_COSA_BCM_ARM_) && !defined(_CBR_PRODUCT_REQ_)
+
+#define kbrlan2_inst "3"
+#define kbrlan3_inst "4"
+#define kmultinet_Sync "multinet-syncMembers"
+
+static void hotspotfd_syncMultinet(void)
+{
+	if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan2_inst, 0)) {
+		CcspTraceError(("sysevent set %s failed on brlan2\n", kmultinet_Sync));
+        }
+
+	if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan3_inst, 0)) {
+		CcspTraceError(("sysevent set %s failed on brlan3\n", kmultinet_Sync));
+        }
+}
+#endif
+
 static int hotspotfd_sleep(int sec, bool l_tunnelAlive) {
 	bool isNew=false;	
 	time_t l_sRefTime, l_sNowTime;
@@ -1211,6 +1229,9 @@ Try_primary:
 
                         CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
                     }
+		    #if defined(_COSA_BCM_ARM_) && !defined(_CBR_PRODUCT_REQ_)
+		    hotspotfd_syncMultinet();
+		    #endif
 					gTunnelIsUp=true;
 					
                     pthread_mutex_lock(&keep_alive_mutex);
@@ -1326,6 +1347,10 @@ Try_secondary:
 
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
+
+		    #if defined(_COSA_BCM_ARM_) && !defined(_CBR_PRODUCT_REQ_)
+		    hotspotfd_syncMultinet();
+		    #endif
 					gTunnelIsUp=true;
 					
                     pthread_mutex_lock(&keep_alive_mutex);
