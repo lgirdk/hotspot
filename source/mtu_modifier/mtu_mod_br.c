@@ -413,6 +413,11 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
     int icmpFlag, segFlag;
     unsigned short totalLen;
 
+    //>>zqiu: indev and outdev could be null
+    if(!indev || !outdev)
+	return (NF_DROP);
+    //<<
+
     if(skb->protocol != htons(ETH_P_IP))
         return(NF_ACCEPT);
     brDev = (struct net_device *)(indev);
