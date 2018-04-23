@@ -414,8 +414,10 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
     unsigned short totalLen;
 
     //>>zqiu: indev and outdev could be null
-    if(!indev || !outdev)
-	return (NF_DROP);
+    if(!indev || !outdev){
+		printk(KERN_DEBUG "COMCAST ERROR:: indev or outdev was an unexpected value NULL.\n");
+		return (NF_DROP);
+	}
     //<<
 
     if(skb->protocol != htons(ETH_P_IP))
