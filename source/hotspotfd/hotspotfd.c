@@ -375,8 +375,10 @@ printf("------- ping %d << status\n");
 static int hotspotfd_ping(char *address, bool checkClient) {
     //zqiu: do not ping WAG if no client attached, and no new client join in
 printf("------------------ %s \n", __func__); 
+#if !defined(_COSA_BCM_MIPS_)
     if(checkClient && !hotspotfd_isClientAttached( NULL) )
         return  STATUS_SUCCESS;
+#endif
     return  _hotspotfd_ping(address);
 }
 
