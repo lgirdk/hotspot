@@ -415,7 +415,7 @@ static unsigned int mtu_mod_hook(unsigned int hook, struct sk_buff *skb,
 
     //>>zqiu: indev and outdev could be null
     if(!indev || !outdev){
-		printk(KERN_DEBUG "COMCAST ERROR:: indev or outdev was an unexpected value NULL.\n");
+		printk(KERN_ERR "COMCAST ERROR:: indev  %s outdev  %s\n", indev?indev->name:"null",  outdev?outdev->name:"null" ); 
 		return (NF_DROP);
 	}
     //<<
