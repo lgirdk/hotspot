@@ -382,7 +382,7 @@ printf("------------------ %s \n", __func__);
     return  _hotspotfd_ping(address);
 }
 
-#if defined(_COSA_BCM_ARM_) && !defined(_CBR_PRODUCT_REQ_)
+#if defined(_COSA_BCM_ARM_) 
 
 #define kbrlan2_inst "3"
 #define kbrlan3_inst "4"
@@ -1227,7 +1227,7 @@ Try_primary:
 
                         CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
                     }
-		    #if defined(_COSA_BCM_ARM_) && !defined(_CBR_PRODUCT_REQ_)
+		    #if defined(_COSA_BCM_ARM_) 
 		    hotspotfd_syncMultinet();
 		    #endif
 					gTunnelIsUp=true;
@@ -1346,7 +1346,7 @@ Try_secondary:
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
 
-		    #if defined(_COSA_BCM_ARM_) && !defined(_CBR_PRODUCT_REQ_)
+		    #if defined(_COSA_BCM_ARM_)
 		    hotspotfd_syncMultinet();
 		    #endif
 					gTunnelIsUp=true;
