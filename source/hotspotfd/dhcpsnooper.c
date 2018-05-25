@@ -328,6 +328,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                 }
             }
         }
+	
+        /* Inserting MAC as Hostname if DHCP Message is not having Host Name */
+	if(0 == strcmp(host_str,""))
+	{
+		snoop_AddClientListHostname(gRemote_id, gRemote_id, queue_number);
+	}
 
         if (bDHCP) {
 
