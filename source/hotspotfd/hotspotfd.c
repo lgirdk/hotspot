@@ -584,9 +584,8 @@ static void *hotspotfd_sysevent_handler(void *data)
 
         err = sysevent_getnotification(sysevent_fd, sysevent_token, name, &namelen,  val, &vallen, &getnotification_id);
 
-        if (err) {
-            CcspTraceError(("error in sysevent getnotification %d\n", err));
-        } else {
+        if(!err)
+        {
             if (strcmp(name, kHotspotfd_primary)==0) {
                 msg_debug("Received %s sysevent\n", kHotspotfd_primary);
                 msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
@@ -731,8 +730,8 @@ static void *hotspotfd_sysevent_handler(void *data)
             for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
 
                 if (strcmp(name, gSnoopSyseventCircuitIDs[i])==0) {
-					CcspTraceInfo(("CircuitID list case\n"));
-	                strcpy(gSnoopCircuitIDList[i], val); 
+                    CcspTraceInfo(("CircuitID list case\n"));
+                    strcpy(gSnoopCircuitIDList[i], val); 
                     break;
                 }
             }
@@ -740,13 +739,13 @@ static void *hotspotfd_sysevent_handler(void *data)
             for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
 
                 if (strcmp(name, gSnoopSyseventSSIDs[i])==0) {
-					CcspTraceInfo(("gSnoopSSIDListInt case\n"));
+                    CcspTraceInfo(("gSnoopSSIDListInt case\n"));
                     strcpy(gSnoopSSIDList[i], val);
                     gSnoopSSIDListInt[i] = atoi(val);
                     break;
                 }
             }
-		}
+        }
         hotspotfd_log();
     }
 
