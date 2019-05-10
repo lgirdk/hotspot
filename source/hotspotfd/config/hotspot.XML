@@ -30,7 +30,7 @@
         <objectType>object</objectType>
         <objects>
             <object>
-                <name>Tunnel</name>
+                <name>Hotspot</name>
                 <objectType>object</objectType>
                 <functions>
                     <func_GetParamStringValue>HotspotConnectedDevice_GetParamStringValue</func_GetParamStringValue>
