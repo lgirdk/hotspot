@@ -1230,10 +1230,10 @@ Try_primary:
 
                         CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
                     }
-		    #if defined(_COSA_BCM_ARM_) 
-		    hotspotfd_syncMultinet();
+                    #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_))
+                    hotspotfd_syncMultinet();
 		    #endif
-					gTunnelIsUp=true;
+		    gTunnelIsUp=true;
 					
                     pthread_mutex_lock(&keep_alive_mutex);
                     gbFirstPrimarySignal = false;
@@ -1348,11 +1348,10 @@ Try_secondary:
 
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
-
-		    #if defined(_COSA_BCM_ARM_)
-		    hotspotfd_syncMultinet();
+                    #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_))
+                    hotspotfd_syncMultinet();
 		    #endif
-					gTunnelIsUp=true;
+		    gTunnelIsUp=true;
 					
                     pthread_mutex_lock(&keep_alive_mutex);
                     gbFirstSecondarySignal = false;
