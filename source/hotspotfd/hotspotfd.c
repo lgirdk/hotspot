@@ -57,6 +57,9 @@
 #include <arpa/inet.h>
 #include <linux/if.h>
 
+#include "ssp_global.h"
+#include "ansc_platform.h"
+
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
     #include <sysevent/sysevent.h>
     #include <syscfg/syscfg.h>
@@ -87,6 +90,10 @@
 
 #define kMax_InterfaceLength            20
 #define DEBUG_INI_NAME "/etc/debug.ini"
+
+extern  ANSC_HANDLE             bus_handle;
+static char ssid_reset_mask = 0x0;
+#define SSIDVAL 4
 
 struct packet {
     struct icmphdr hdr;
@@ -176,6 +183,137 @@ char gSnoopSyseventSSIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = {
     kSnooper_ssid_index3,
     kSnooper_ssid_index4
 };
+
+
+static bool set_validatessid() {
+
+    CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
+    parameterValStruct_t  *param_val = NULL;
+    char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    const char ap5[]="Device.WiFi.SSID.5.Enable";
+    const char ap6[]="Device.WiFi.SSID.6.Enable";
+    const char ap9[]="Device.WiFi.SSID.9.Enable";
+    const char ap10[]="Device.WiFi.SSID.10.Enable";
+    char *paramNames[]={ap5,ap6,ap9,ap10};
+    char* faultParam      = NULL;
+    int   ret             = 0; 
+    int i = 0;
+  
+    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * 4);
+    if (NULL == param_val)
+    {  
+        CcspTraceError(("Memory allocation failed in hotspot \n"));
+        return FALSE;
+    }
+  
+    for (i = 0; i < SSIDVAL; i++)
+    {
+       param_val[i].parameterName = paramNames[i];
+       if(ssid_reset_mask & (1<<i))
+       {   
+           param_val[i].parameterValue=AnscCloneString("true");
+           CcspTraceInfo(("Enabling ssid for the parameter  = %s\n", paramNames[i]));
+       }   
+       else
+       {
+           param_val[i].parameterValue=AnscCloneString("false");
+           CcspTraceInfo(("Disabling ssid for the parameter  = %s\n", paramNames[i]));
+       }   
+       param_val[i].type = ccsp_boolean;
+    }
+
+    ret = CcspBaseIf_setParameterValues(
+            bus_handle,
+            component,
+            dstPath,
+            0,
+            0,   
+            param_val,
+            4,
+            TRUE,
+            &faultParam
+            );   
+
+    if( ( ret != CCSP_SUCCESS ) && ( faultParam!=NULL )) { 
+            CcspTraceError((" ssidinfo set bus failed = %s\n"));
+            bus_info->freefunc( faultParam );
+            if(param_val)
+            {
+                 free(param_val);
+                 param_val = NULL;
+            }
+            return FALSE;
+    }
+    if(param_val)
+    {
+        free(param_val);
+        param_val = NULL;
+    }
+    ssid_reset_mask = 0;
+    return TRUE;
+}
+
+
+
+static bool get_validate_ssid() 
+{
+    int ret = ANSC_STATUS_FAILURE;
+    parameterValStruct_t    **valStructs = NULL;
+    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
+    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    const char ap5[]="Device.WiFi.SSID.5.Enable";
+    const char ap6[]="Device.WiFi.SSID.6.Enable";
+    const char ap9[]="Device.WiFi.SSID.9.Enable";
+    const char ap10[]="Device.WiFi.SSID.10.Enable";
+    char *paramNames[]={ap5,ap6,ap9,ap10};
+    int  valNum = 0, i =0; 
+    BOOL ret_b=FALSE;
+
+    ssid_reset_mask = 0;
+    ret = CcspBaseIf_getParameterValues(
+            bus_handle,
+            dstComponent,
+            dstPath,
+            paramNames,
+            4,
+            &valNum,
+            &valStructs);
+    
+    if(CCSP_Message_Bus_OK != ret){
+         CcspTraceError(("%s hotspot_getParameterValues %s error %d\n", __FUNCTION__,paramNames[0],ret));
+         free_parameterValStruct_t(bus_handle, valNum, valStructs);
+         return FALSE;
+    }
+    
+
+    if(valStructs)
+    {
+      CcspTraceInfo(("Retrieving previous ssid info ssid 5 = %s ssid 6 = %s ssid 9 = %s ssid 10 = %s \n",valStructs[0]->parameterValue,valStructs[1]->parameterValue, valStructs[2]->parameterValue,valStructs[3]->parameterValue));
+    
+      for(i = 0; i < SSIDVAL; i++)
+      {
+           if (0 == strncmp("true", valStructs[i]->parameterValue, 4))
+           {
+               ssid_reset_mask |= (1<<i);
+           }
+           else
+           {   
+               ssid_reset_mask |= (0<<i);
+           }     
+      }
+      ret_b = TRUE;
+    }
+    else
+    {
+           CcspTraceError((" ssid information not updated in valstrcuts \n"));
+    }
+
+    free_parameterValStruct_t(bus_handle, valNum, valStructs);
+    return ret_b;
+
+}
+
 
 static bool hotspotfd_isClientAttached(bool *pIsNew)
 {
@@ -1225,7 +1363,20 @@ Try_primary:
                 }
 
                 if (gbFirstPrimarySignal) {
-					CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));				
+
+                    if(ssid_reset_mask != 0) 
+                    {
+                       if(TRUE == set_validatessid())
+                       {
+                          CcspTraceInfo(("SSID's updated before creating tunnels. \n"));
+                       }
+                       else
+                       {
+                          CcspTraceInfo(("SSID's are not updated before creating tunnels. \n"));
+                       }
+                    } 
+
+		     CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));				
 
                     if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                      kHotspotfd_tunnelEP, gpPrimaryEP, 0)) {
@@ -1373,6 +1524,15 @@ Try_secondary:
             } else {
 				CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive%s\n", gpSecondaryEP));	
                 gSecondaryIsAlive = false;
+                   
+                if(TRUE == get_validate_ssid())
+                {
+                    CcspTraceInfo(("SSID values are updated successfully \n"));
+                }
+                else
+                {
+                    CcspTraceInfo(("SSID values not are updated successfully \n"));    
+                }
 
                 pthread_mutex_lock(&keep_alive_mutex);
                 gbFirstSecondarySignal = true;
