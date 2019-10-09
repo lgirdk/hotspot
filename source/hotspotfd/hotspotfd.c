@@ -594,8 +594,6 @@ static void *hotspotfd_sysevent_handler(void *data)
 
                 msg_debug("gpPrimaryEP: %s\n", gpPrimaryEP);
 
-		CcspTraceInfo((" GRE flag set to %s in sysevent handler \n", gbFirstPrimarySignal));				
-
                 pthread_mutex_lock(&keep_alive_mutex);
                 gbFirstPrimarySignal = true;
                 pthread_mutex_unlock(&keep_alive_mutex);
@@ -1240,7 +1238,6 @@ Try_primary:
                     pthread_mutex_lock(&keep_alive_mutex);
                     gbFirstPrimarySignal = false;
                     pthread_mutex_unlock(&keep_alive_mutex);
-		    CcspTraceInfo(("Primary GRE flag set to %s\n", gbFirstPrimarySignal));				
                 }
 
                 msg_debug("Primary GRE Tunnel Endpoint is alive\n");
@@ -1256,7 +1253,7 @@ Try_primary:
                 pthread_mutex_lock(&keep_alive_mutex);
                 gbFirstPrimarySignal = true;
                 pthread_mutex_unlock(&keep_alive_mutex);
-		CcspTraceInfo(("Primary GRE flag set to %s in else\n", gbFirstPrimarySignal));				
+
                 keepAliveThreshold++;
 				//if (gKeepAliveEnable == false) continue;
 				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
@@ -1329,7 +1326,6 @@ Try_secondary:
                     gPrimaryIsActive = true;
 					//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
 					gbFirstPrimarySignal = true;
-		CcspTraceInfo((" GRE flag set to %s in try secondary\n", gbFirstPrimarySignal));				
 					// fix ends
                     gSecondaryIsActive = false;
                     keepAliveThreshold = 0;
