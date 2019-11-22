@@ -1,3 +1,4 @@
+
 /************************************************************************************
   If not stated otherwise in this file or this component's Licenses.txt file the
   following copyright and licenses apply:
@@ -54,6 +55,7 @@
 #include "ccsp_trace.h"
 #include "plugin_main.h"
 #include "hotspotfd.h"
+#include "dm_pack_create_func.h"
 
 PDSLH_CPE_CONTROLLER_OBJECT     pDslhCpeController        = NULL;
 PCOMPONENT_COMMON_HOTSPOT          g_pComponent_COMMON_hotspot  = NULL;
@@ -180,11 +182,11 @@ ssp_engage
     }
 
     returnStatus =
-        pDslhCpeController->RegisterCcspDataModel
+        pDslhCpeController->RegisterCcspDataModel2
             (
                 (ANSC_HANDLE)pDslhCpeController,
                 CrName, /* CCSP_DBUS_INTERFACE_CR,*/              /* CCSP CR ID */
-                CCSP_DATAMODEL_XML_FILE,             /* Data Model XML file. Can be empty if only base data model supported. */
+                DMPackCreateDataModelXML,             /* Comcast generated code to create XML */
                 CCSP_COMPONENT_NAME_HOTSPOT,            /* Component Name    */
                 CCSP_COMPONENT_VERSION_HOTSPOT,         /* Component Version */
                 CCSP_COMPONENT_PATH_HOTSPOT,            /* Component Path    */
