@@ -53,6 +53,8 @@
 #include "dhcp.h"
 #include "ccsp_trace.h"
 
+#include <telemetry_busmessage_sender.h>
+
 #define mylist_safe(p, q, h) \
          for (p = (h)->n, q = p->n; p != (h); \
                  p = q, q = p->n)
@@ -603,6 +605,7 @@ static void snoop_CheckClientIsPrivate(char *pRemote_id)
         if (!strcasecmp(pRemote_id, l_cDhcpClientAddr))
         {
             CcspTraceInfo(("Private Client Check: Xfinitywifi Client :%s was a private client \n", pRemote_id));
+	    t2_event_d("WIFI_INFO_ClientTransitionToXfininityWifi", 1);
             break;
         }
     }
@@ -661,6 +664,7 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
 			}
         } else {
             CcspTraceError(("Max. number of clients %d already in list\n", gSnoopNumberOfClients));
+	    t2_event_d("SYS_INFO_Hotspot_MaxClients", 1);
         }
     } else {
         msg_debug("Client %s already in list.\n", pRemote_id);
