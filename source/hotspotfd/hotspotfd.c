@@ -73,6 +73,8 @@
 #include "ccsp_trace.h"
 #include "dhcpsnooper.h"
 
+#include <telemetry_busmessage_sender.h>
+
 #define PACKETSIZE  64
 #define kDefault_KeepAliveInterval      60 
 #define kDefault_KeepAliveIntervalFailure      300 
@@ -1380,7 +1382,9 @@ Try_primary:
                        }
                     } 
 
-		     CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));				
+		    CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));
+		    t2_event_d("SYS_INFO_Create_GRE_Tunnel", 1);
+
 
                     if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                      kHotspotfd_tunnelEP, gpPrimaryEP, 0)) {

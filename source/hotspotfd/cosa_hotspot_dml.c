@@ -70,6 +70,8 @@
 #include "cosa_hotspot_dml.h"
 #include "dhcpsnooper.h"
 
+#include <telemetry_busmessage_sender.h>
+
 BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* ParamName, char* strValue)
 {
 	int l_iAddOrDelete, l_iSsidIndex, l_iRssi; 
@@ -80,12 +82,14 @@ BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* P
 		sscanf(strValue, "%d|%d|%d|%s", &l_iAddOrDelete, &l_iSsidIndex, &l_iRssi, l_cMacAddr);
 		if (1 == l_iAddOrDelete)
 		{
-			CcspTraceInfo(("Added case, Client with MAC:%s will be added\n", l_cMacAddr));
+		        CcspTraceInfo(("Added case, Client with MAC:%s will be added\n", l_cMacAddr));
+		        t2_event_d("WIFI_INFO_Hotspot_client_connected", 1);
 			updateRssiForClient(l_cMacAddr, l_iRssi);
 		}
 		else
 		{
-			CcspTraceInfo(("Removal case, Client with MAC:%s will be removed \n", l_cMacAddr));			
+		        CcspTraceInfo(("Removal case, Client with MAC:%s will be removed \n", l_cMacAddr));
+		        t2_event_d("WIFI_INFO_Hotspot_client_disconnected", 1);
 			snoop_RemoveClientListEntry(l_cMacAddr);
 		}	
         return TRUE;
