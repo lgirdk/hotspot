@@ -1522,7 +1522,7 @@ Try_secondary:
                 if (gKeepAliveEnable == false) continue;
 
             } else {
-				CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive%s\n", gpSecondaryEP));	
+				CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive\n", gpSecondaryEP));
                 gSecondaryIsAlive = false;
                    
                 if(TRUE == get_validate_ssid())
