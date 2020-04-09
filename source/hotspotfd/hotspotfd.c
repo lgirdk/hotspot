@@ -420,7 +420,9 @@ printf("------- ping >>\n");
 
         // Bind to a specific interface only 
         memset(&ifr, 0, sizeof(ifr));
-        snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), gKeepAliveInterface);
+        strncpy(ifr.ifr_name, gKeepAliveInterface,sizeof(ifr.ifr_name) -1 );
+        ifr.ifr_name[ sizeof(ifr.ifr_name) ] = '\0';
+        
         if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
             perror("Error on SO_BINDTODEVICE");
             status = STATUS_FAILURE;
@@ -506,7 +508,8 @@ printf("------- ping >>\n");
     if ( sd >= 0 ) {
         close(sd);
     }
-printf("------- ping %d << status\n");
+/* Coverity Fix CID :124917 PRINTF_ARGS*/
+printf("------- ping %d << status\n",status);
     return status;
 }
 
@@ -714,7 +717,8 @@ static void *hotspotfd_sysevent_handler(void *data)
     }
 
     for (;;) {
-        char name[25], val[100];
+	/* Coverity Fix CID : 140441 STRING_OVERFLOW */
+        char name[25], val[kMax_IPAddressLength];
         int namelen = sizeof(name);
         int vallen  = sizeof(val);
         int err;
@@ -1421,8 +1425,12 @@ Try_primary:
                 } else {
                     gPrimaryIsActive = false;
                     gSecondaryIsActive = true;
-					//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
-					gbFirstSecondarySignal = true;
+				
+	//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
+                       /* Coverity FiX CID: 140440 MISSING_LOCK */  
+                       pthread_mutex_lock(&keep_alive_mutex);
+                        gbFirstSecondarySignal = true;
+                    pthread_mutex_unlock(&keep_alive_mutex);
 					//fix ends
                     keepAliveThreshold = 0;
                     gPriStateIsDown = true;
@@ -1480,7 +1488,10 @@ Try_secondary:
 
                     gPrimaryIsActive = true;
 					//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
-					gbFirstPrimarySignal = true;
+                    /* Coverity Fix CID:140439 MISSING_LOCK */
+                        pthread_mutex_lock(&keep_alive_mutex);
+                         gbFirstPrimarySignal = true;
+                    pthread_mutex_unlock(&keep_alive_mutex);
 		CcspTraceInfo((" GRE flag set to %d in try secondary\n", gbFirstPrimarySignal));				
 					// fix ends
                     gSecondaryIsActive = false;

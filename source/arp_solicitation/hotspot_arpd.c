@@ -104,7 +104,8 @@ typedef struct arp_pkt {
 }arp_pkt_t;
 
 typedef struct if_s {
-    char ifname[32];
+    /* Coverity Fix CID:135319 BUFFER_SIZE */
+    char ifname[16];
     int ifindex;
     unsigned char mac[ETH_ALEN];
     struct in_addr ip;
@@ -200,7 +201,8 @@ int main (int argc, char *argv[])
             debug_flag = 1;
             break;
         case 'i':   /* interface name */
-            strncpy(erouter.ifname, optarg, sizeof(erouter.ifname));
+            /* Coverity Fix CID:135541 BUFFER_SIZE_WARNING */
+            strncpy(erouter.ifname, optarg, sizeof(erouter.ifname) -1);
             DPRINTF("Interface name %s provided!\n", erouter.ifname);
             break;
         case 'q':
@@ -288,7 +290,8 @@ static int get_interface_by_ifname(if_t *target)
     }
 
     bzero(&req, sizeof(req));
-    strncpy(req.ifr_name, target->ifname, strlen(target->ifname));
+    strncpy(req.ifr_name, target->ifname, sizeof(req.ifr_name) -1);
+    req.ifr_name[sizeof(req.ifr_name)-1] = '\0';
     if (ioctl(fd, SIOCGIFHWADDR, &req) == -1){
         printf("Failed to ioctl SIOCGIFHWADDR!\n");
         close(fd);

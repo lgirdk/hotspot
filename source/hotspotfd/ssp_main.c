@@ -203,7 +203,17 @@ int main(int argc, char* argv[])
     {
         if ((strcmp(argv[idx], "-subsys") == 0))
         {
-            AnscCopyString(g_Subsystem, argv[idx+1]);
+            /*Coverity Fix CID:135244 STRING_SIZE */
+            if( (idx+1) < argc )
+            {  
+               strncpy(g_Subsystem, argv[idx+1],sizeof(g_Subsystem));
+            }
+            else
+            {
+                fprintf(stderr, "Missing in -subsys \n");
+                exit(0);
+            } 
+            
         }
         else if (strcmp(argv[idx], "-c") == 0)
         {
