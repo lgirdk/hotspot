@@ -162,11 +162,17 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
     }
 
     if(already_in_list) 
-	{
-		CcspTraceInfo(("Client:%s is present update hostname:%s\n", pRemote_id, pHostname));
-        strcpy(pNewClient->client.hostname, pHostname);
+    {
+          CcspTraceInfo(("Client:%s is present update hostname:%s\n", pRemote_id, pHostname));
+        /* Coverity Fix CID:135307 STRING_OVERFLOW*/
+        strncpy(pNewClient->client.hostname,pHostname,sizeof(pNewClient->client.hostname)-1);
+        pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) ] = '\0';
     }
-	strcpy(g_cHostnameForQueue[queue_number], pHostname);	
+        /* Coverity Fix CID:135307 STRING_OVERFLOW */
+        /* Coverity Fix CID:64398 DC. STRING_BUFFER */
+         strncpy(g_cHostnameForQueue[queue_number], pHostname, sizeof(g_cHostnameForQueue[queue_number]) - 1);
+         g_cHostnameForQueue[queue_number][sizeof(g_cHostnameForQueue[queue_number]) - 1] = '\0';
+        
 }
 
 static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number) {
@@ -624,25 +630,35 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
         if(gSnoopNumberOfClients < gSnoopMaxNumberOfClients) { 
     
             pNewClient= (snooper_priv_client_list *)malloc(sizeof(snooper_priv_client_list));
-			memset(pNewClient, 0x00, sizeof(pNewClient));
+                        /* Coverity Fix CID:59806 NULL_RETURNS */	
+                        if( pNewClient != NULL )
+                        {
+                           memset(pNewClient, 0x00, sizeof(pNewClient));
+           
+                          if (NULL == pCircuit_id)
+                          {
+                             strncpy(pNewClient->client.remote_id, pRemote_id,sizeof(pNewClient->client.remote_id) -1 );
+                             pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) ] = '\0';
+                          }
+                           else
+                          {
+                                /* Coverity Fix  CID:135344,69252 STRING_OVERFLOW*/
+                                strncpy(pNewClient->client.remote_id, pRemote_id, sizeof(pNewClient->client.remote_id) -1 );
+                                strncpy(pNewClient->client.circuit_id, pCircuit_id, sizeof(pNewClient->client.circuit_id) -1 );
+                                strncpy(pNewClient->client.dhcp_status, pDhcp_status, sizeof(pNewClient->client.dhcp_status) -1 );
+                                strncpy(pNewClient->client.ipv4_addr, pIpv4_addr, sizeof(pNewClient->client.ipv4_addr) -1 );
+                                strncpy(pNewClient->client.hostname,  pHostname, sizeof(pNewClient->client.hostname) -1 );
+                          }
+                           pNewClient->client.rssi = rssi;
+                           pNewClient->client.noOfTriesForOnlineCheck = 0; 
+                           mylist_add(&pNewClient->list, &gSnoop_ClientList.list);
+                           gSnoopNumberOfClients++;
+                        } 
+                        else
+                        {
+                           CcspTraceError(("%s:pNewClient attain NULL\n",__FUNCTION__));
 
-			if (NULL == pCircuit_id)
-			{
-				strcpy(pNewClient->client.remote_id, pRemote_id);
 			}
-			else
-			{
-				strcpy(pNewClient->client.remote_id, pRemote_id);
-    	        strcpy(pNewClient->client.circuit_id, pCircuit_id);
-        	    strcpy(pNewClient->client.dhcp_status, pDhcp_status);
-            	strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
-	            strcpy(pNewClient->client.hostname, pHostname);
-			}
-            pNewClient->client.rssi = rssi;
-            pNewClient->client.noOfTriesForOnlineCheck = 0; 
-            mylist_add(&pNewClient->list, &gSnoop_ClientList.list);
-            gSnoopNumberOfClients++;
-
         } else {
             CcspTraceError(("Max. number of clients %d already in list\n", gSnoopNumberOfClients));
         }
@@ -798,14 +814,15 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     uint32_t queue_id = -1; /*RDKB-7435, CID-33527, init before use */
     int queue_number = *(int *)cbData;
     //uint16_t checksum;
-    struct nfqnl_msg_packet_hdr *header;
+    struct nfqnl_msg_packet_hdr *header=NULL;
     int i;
     int j=0;
-    int len;
+    int len = 0;
     int new_data_len;
-    unsigned char * pktData;
-    struct iphdr *iph;
-    char ipv4_addr[INET_ADDRSTRLEN];
+    unsigned char * pktData = NULL;
+    struct iphdr *iph = NULL;
+    /* Coverity Fix CID: 74885 UnInit var */
+    char ipv4_addr[INET_ADDRSTRLEN] = {0};
 
     // The iptables queue number is passed when this handler is registered
     // with nfq_create_queue
@@ -1085,12 +1102,13 @@ void updateRssiForClient(char* pRemote_id, int rssi)
 
 void *dhcp_snooper_init(void *data)
 {
-	struct nfq_handle *nfqHandle;
-    struct nfq_q_handle *myQueue;
-    struct nfnl_handle *netlinkHandle;
-    int status; 
-    int fd, res, i, j=0;
-    char buf[4096];
+    /* Coverity Fix CID:71609 UnInit var*/
+    struct nfq_handle *nfqHandle = NULL;
+    struct nfq_q_handle *myQueue = NULL;
+    struct nfnl_handle *netlinkHandle = NULL;
+    int status = 0; 
+    int fd = 0, res = 0, i =0, j=0;
+    char buf[4096] = {0};
 
     // Get a queue connection handle
     if (!(nfqHandle = nfq_open())) {
