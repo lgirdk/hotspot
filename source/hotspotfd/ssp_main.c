@@ -42,6 +42,9 @@
 #include "hotspotfd.h"
 #include "safec_lib_common.h"
 
+#ifdef INCLUDE_BREAKPAD
+#include "breakpad_wrapper.h"
+#endif
 #define DEBUG_INI_NAME "/etc/debug.ini"
 extern char*                                pComponentName;
 char                                        g_Subsystem[32]         = {0};
@@ -292,6 +295,9 @@ int main(int argc, char* argv[])
     if ( bRunAsDaemon ) 
         daemonize();
 
+#ifdef INCLUDE_BREAKPAD
+    breakpad_ExceptionHandler();
+#else
     signal(SIGTERM, sig_handler);
     signal(SIGINT, sig_handler);
     /*signal(SIGCHLD, sig_handler);*/
@@ -305,6 +311,7 @@ int main(int argc, char* argv[])
     signal(SIGILL, sig_handler);
     signal(SIGQUIT, sig_handler);
     signal(SIGHUP, sig_handler);
+#endif  /*  INCLUDE_BREAKPAD */ 
 
     cmd_dispatch('e');
 #ifdef _COSA_SIM_
