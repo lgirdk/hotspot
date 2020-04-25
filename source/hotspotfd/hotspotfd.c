@@ -345,7 +345,6 @@ static bool get_validate_ssid()
     int  valNum = 0, i =0; 
     BOOL ret_b=FALSE;
 
-    ssid_reset_mask = 0;
     ret = CcspBaseIf_getParameterValues(
             bus_handle,
             dstComponent,
@@ -1597,6 +1596,14 @@ Try_secondary:
                     gSwitchedBackToPrimary++;
                     break;
                 }
+                if(ssid_reset_mask != 0) {
+                     if(TRUE == set_validatessid()) {
+                           CcspTraceInfo(("SSID's updated secondary tunnel deletion. \n"));
+                     }    
+                     else {
+                                   CcspTraceInfo(("SSID's are not updated after tunnel deletion. \n"));
+                          }    
+                }    
 
                 if (gbFirstSecondarySignal) {
 					CcspTraceInfo(("Create Secondary GRE tunnel with endpoint:%s\n", gpSecondaryEP));
@@ -1627,13 +1634,16 @@ Try_secondary:
 				CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive\n", gpSecondaryEP));
                 gSecondaryIsAlive = false;
                    
-                if(TRUE == get_validate_ssid())
-                {
-                    CcspTraceInfo(("SSID values are updated successfully \n"));
-                }
-                else
-                {
-                    CcspTraceInfo(("SSID values not are updated successfully \n"));    
+                if(ssid_reset_mask == 0)
+                { 
+                     if(TRUE == get_validate_ssid())
+                     {
+                         CcspTraceInfo(("SSID values are updated successfully \n"));
+                     }
+                     else
+                     {
+                         CcspTraceInfo(("SSID values not are updated successfully \n"));    
+                     }
                 }
 
                 pthread_mutex_lock(&keep_alive_mutex);
