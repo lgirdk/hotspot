@@ -72,6 +72,7 @@
 #include "hotspotfd.h"
 #include "ccsp_trace.h"
 #include "dhcpsnooper.h"
+#include "safec_lib_common.h"
 
 #include <telemetry_busmessage_sender.h>
 
@@ -186,6 +187,77 @@ char gSnoopSyseventSSIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = {
     kSnooper_ssid_index4
 };
 
+typedef enum {
+    HOTSPOTFD_PRIMARY,
+    HOTSPOTFD_SECONDARY,
+    HOTSPOTFD_KEEPALIVE,
+    HOTSPOTFD_THRESHOLD,
+    HOTSPOTFD_MAXSECONDARY,
+    HOTSPOTFD_POLICY,
+    HOTSPOTFD_ENABLE,
+    HOTSPOTFD_COUNT,
+    HOTSPOTFD_LOGENABLE,
+    HOTSPOTFD_DEADINTERVAL,
+    SNOOPER_ENABLE,
+    SNOOPER_DEBUGENABLE,
+    SNOOPER_LOGENABLE,
+    SNOOPER_CIRCUITENABLE,
+    SNOOPER_REMOTEENABLE,
+    SNOOPER_MAXCLIENTS,
+    HOTSPOTFD_ERROR
+}HotspotfdType;
+
+typedef struct
+{
+    char         *msgStr; 
+    HotspotfdType mType;       
+}Hotspotfd_MsgItem;
+
+Hotspotfd_MsgItem hotspotfdMsgArr[] = {
+    {"hotspotfd-primary",                             HOTSPOTFD_PRIMARY},
+    {"hotspotfd-secondary",                           HOTSPOTFD_SECONDARY},
+    {"hotspotfd-keep-alive",                          HOTSPOTFD_KEEPALIVE},
+    {"hotspotfd-threshold",                           HOTSPOTFD_THRESHOLD},
+    {"hotspotfd-max-secondary",                       HOTSPOTFD_MAXSECONDARY},
+    {"hotspotfd-policy",                              HOTSPOTFD_POLICY},
+    {"hotspotfd-enable",                              HOTSPOTFD_ENABLE},
+    {"hotspotfd-count",                               HOTSPOTFD_COUNT},
+    {"hotspotfd-log-enable",                          HOTSPOTFD_LOGENABLE},
+    {"hotspotfd-dead-interval",                       HOTSPOTFD_DEADINTERVAL},
+    {"snooper-enable",                                SNOOPER_ENABLE},
+    {"snooper-debug-enable",                          SNOOPER_DEBUGENABLE},
+    {"snooper-log-enable",                            SNOOPER_LOGENABLE},
+    {"snooper-circuit-enable",                        SNOOPER_CIRCUITENABLE},
+    {"snooper-remote-enable",                         SNOOPER_REMOTEENABLE},
+    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS}};
+
+HotspotfdType Get_HotspotfdType(char * name)
+{
+
+    errno_t rc       = -1;
+    int     ind      = -1;
+    int     i      = 0;
+    int     strlength      = 0;
+
+    if( (!name) || (name[0] == '\0') )
+       return HOTSPOTFD_ERROR;
+
+    strlength = strlen( name );
+
+    for (i = 0; i < HOTSPOTFD_ERROR; i++)
+    {
+       rc = strcmp_s( name, strlength, hotspotfdMsgArr[i].msgStr, &ind);
+       ERR_CHK(rc);
+
+       if((ind==0) && (rc == EOK))
+       {
+          msg_debug("Received %s sysevent\n", hotspotfdMsgArr[i].msgStr);
+          return( hotspotfdMsgArr[i].mType );
+       }
+    }
+
+    return HOTSPOTFD_ERROR;
+}
 
 static bool set_validatessid() {
 
@@ -386,6 +458,7 @@ static int _hotspotfd_ping(char *address)
     struct ifreq ifr;
     unsigned netaddr;
     static int l_iPingCount = 0;
+	errno_t rc = -1;
 
     // This is the number of ping's to send out
     // per keep alive interval
@@ -421,8 +494,14 @@ printf("------- ping >>\n");
         }
 
         // Bind to a specific interface only 
-        memset(&ifr, 0, sizeof(ifr));
-        strncpy(ifr.ifr_name, gKeepAliveInterface,sizeof(ifr.ifr_name) -1 );
+        rc = memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
+		ERR_CHK(rc);
+        rc = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), gKeepAliveInterface);
+		if(rc != EOK)
+		{
+			ERR_CHK(rc);
+			return STATUS_FAILURE;
+		}
         ifr.ifr_name[ sizeof(ifr.ifr_name) ] = '\0';
         
         if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
@@ -606,6 +685,7 @@ static void hotspotfd_SignalHandler(int signo)
 static void hotspotfd_log(void)
 {
     static FILE *out;
+	errno_t rc = -1;
 
     out = fopen(HOTSPOTFD_STATS_PATH, "w");
 
@@ -636,11 +716,21 @@ static void hotspotfd_log(void)
         fclose(out);
 
         // Save statistics to shared memory for the hotspot library
-        strcpy(gpStats->primaryEP, gpPrimaryEP); 
+        rc = strcpy_s(gpStats->primaryEP, sizeof(gpStats->primaryEP), gpPrimaryEP); 
+		if(rc != EOK)
+		{
+			ERR_CHK(rc);
+			return;
+		}
         gpStats->primaryIsActive = gPrimaryIsActive;               
         gpStats->primaryIsAlive = gPrimaryIsAlive;                
 
-        strcpy(gpStats->secondaryEP, gpSecondaryEP);
+        rc = strcpy_s(gpStats->secondaryEP, sizeof(gpStats->secondaryEP), gpSecondaryEP); 
+		if(rc != EOK)
+		{
+			ERR_CHK(rc);
+			return;
+		}
         gpStats->secondaryIsActive = gSecondaryIsActive;             
         gpStats->secondaryIsAlive = gSecondaryIsAlive;              
 
@@ -724,17 +814,24 @@ static void *hotspotfd_sysevent_handler(void *data)
         int namelen = sizeof(name);
         int vallen  = sizeof(val);
         int err;
+		errno_t rc = -1;
+		int ind = -1;
         async_id_t getnotification_id;
 
         err = sysevent_getnotification(sysevent_fd, sysevent_token, name, &namelen,  val, &vallen, &getnotification_id);
 
         if(!err)
         {
-            if (strcmp(name, kHotspotfd_primary)==0) {
-                msg_debug("Received %s sysevent\n", kHotspotfd_primary);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
-                strcpy(gpPrimaryEP, val);
+			HotspotfdType ret_value;            
+            ret_value = Get_HotspotfdType(name);            
+            msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
+            if (ret_value == HOTSPOTFD_PRIMARY) {
+                rc = strcpy_s(gpPrimaryEP, sizeof(gpPrimaryEP), val); 
+		        if(rc != EOK)
+		        {
+			       ERR_CHK(rc);
+			       return;
+		        }
 
                 msg_debug("gpPrimaryEP: %s\n", gpPrimaryEP);
 
@@ -743,11 +840,13 @@ static void *hotspotfd_sysevent_handler(void *data)
                 pthread_mutex_lock(&keep_alive_mutex);
                 gbFirstPrimarySignal = true;
                 pthread_mutex_unlock(&keep_alive_mutex);
-            } else if (strcmp(name, khotspotfd_secondary)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_secondary);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
-                strcpy(gpSecondaryEP, val);
+            } else if (ret_value == HOTSPOTFD_SECONDARY) {
+                rc = strcpy_s(gpSecondaryEP, sizeof(gpSecondaryEP), val); 
+		        if(rc != EOK)
+		        {
+			       ERR_CHK(rc);
+			       return;
+		        }
 
                 msg_debug("gpSecondaryEP: %s\n", gpSecondaryEP);
 
@@ -755,42 +854,27 @@ static void *hotspotfd_sysevent_handler(void *data)
                 gbFirstSecondarySignal = true;
                 pthread_mutex_unlock(&keep_alive_mutex);
 
-            } else if (strcmp(name, khotspotfd_keep_alive)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_keep_alive);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_KEEPALIVE) {
                 gKeepAliveInterval = atoi(val);
 
                 msg_debug("gKeepAliveInterval: %u\n", gKeepAliveInterval);
 
-            } else if (strcmp(name, khotspotfd_keep_alive_threshold)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_keep_alive_threshold);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_THRESHOLD) {
                 gKeepAliveThreshold = atoi(val);
 
                 msg_debug("gKeepAliveThreshold: %u\n", gKeepAliveThreshold);
 
-            } else if (strcmp(name, khotspotfd_max_secondary)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_max_secondary);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_MAXSECONDARY) {
                 gSecondaryMaxTime = atoi(val);
 
                 msg_debug("gSecondaryMaxTime: %u\n", gSecondaryMaxTime);
 
-            } else if (strcmp(name, khotspotfd_keep_alive_policy)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_keep_alive_policy);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_POLICY) {
                 gKeepAlivePolicy = atoi(val);
 
                 msg_debug("gKeepAlivePolicy: %s\n", (gKeepAlivePolicy == 1 ? "NONE" : "ICMP"));
 
-            } else if (strcmp(name, khotspotfd_enable)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_ENABLE) {
                 if (atoi(val) == 0) {
                     gKeepAliveEnable = false;
                     CcspTraceError(("Keep alive enable is false, ICMP ping wont be sent\n"));
@@ -799,94 +883,84 @@ static void *hotspotfd_sysevent_handler(void *data)
                 }
                 msg_debug("gKeepAliveEnable: %u\n", gKeepAliveEnable);
 
-            } else if (strcmp(name, khotspotfd_keep_alive_count)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_keep_alive_count);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_COUNT) {
                 gKeepAliveCount = atoi(val);
 
                 msg_debug("gKeepAliveCount: %u\n", gKeepAliveCount);
 
-            } else if (strcmp(name, khotspotfd_log_enable)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_log_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_LOGENABLE) {
                 gKeepAliveLogEnable = atoi(val);
 
                 msg_debug("gKeepAliveLogEnable: %u\n", gKeepAliveLogEnable);
 
-            } else if (strcmp(name, khotspotfd_dead_interval)==0) {
-                msg_debug("Received %s sysevent\n", khotspotfd_dead_interval);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == HOTSPOTFD_DEADINTERVAL) {
                 gDeadInterval = atoi(val);
 
                 msg_debug("gDeadInterval: %u\n", gDeadInterval);
             }
-            else if (strcmp(name, kSnooper_enable)==0) {
-                msg_debug("Received %s sysevent\n", kSnooper_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            else if (ret_value == SNOOPER_ENABLE) {
                 gSnoopEnable = atoi(val);
 
                 CcspTraceInfo(("gSnoopEnable: %u\n", gSnoopEnable));
 
-            } else if (strcmp(name, kSnooper_debug_enable)==0) {
-                msg_debug("Received %s sysevent\n", kSnooper_debug_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == SNOOPER_DEBUGENABLE) {
                 gSnoopDebugEnabled = atoi(val);
 
                 CcspTraceInfo(("gSnoopDebugEnabled: %u\n", gSnoopDebugEnabled));
 
-            } else if (strcmp(name, kSnooper_log_enable)==0) {
-                msg_debug("Received %s sysevent\n", kSnooper_log_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == SNOOPER_LOGENABLE) {
                 gSnoopLogEnabled = atoi(val);
 
                 CcspTraceInfo(("gSnoopDebugEnabled: %u\n", gSnoopLogEnabled));
 
-            } else if (strcmp(name, kSnooper_circuit_enable)==0) {
-                msg_debug("Received %s sysevent\n", kSnooper_circuit_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == SNOOPER_CIRCUITENABLE) {
                 gSnoopCircuitEnabled = atoi(val);
 
                 CcspTraceInfo(("gSnoopCircuitEnabled: %u\n", gSnoopCircuitEnabled));
 
-            } else if (strcmp(name, kSnooper_remote_enable)==0) {
-                msg_debug("Received %s sysevent\n", kSnooper_remote_enable);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == SNOOPER_REMOTEENABLE) {
                 gSnoopRemoteEnabled = atoi(val);
 
                 CcspTraceInfo(("gSnoopRemoteEnabled: %u\n", gSnoopRemoteEnabled));
 
-            } else if (strcmp(name, kSnooper_max_clients)==0) {
-                msg_debug("Received %s sysevent\n", kSnooper_max_clients);
-                msg_debug("name: %s, namelen: %d,  val: %s, vallen: %d\n", name, namelen, val, vallen);
-
+            } else if (ret_value == SNOOPER_MAXCLIENTS) {
                 gSnoopMaxNumberOfClients = atoi(val);
 
                 CcspTraceInfo(("gSnoopMaxNumberOfClients: %u\n", gSnoopMaxNumberOfClients));
 
             } 
 
-            for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
+            int strlength;
 
-                if (strcmp(name, gSnoopSyseventCircuitIDs[i])==0) {
+            strlength = strlen(name);
+
+            for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
+                rc = strcmp_s(name, strlength,gSnoopSyseventCircuitIDs[i], &ind);
+                ERR_CHK(rc);
+                if ((ind == 0) && (rc == EOK)) {
                     CcspTraceInfo(("CircuitID list case\n"));
-                    strcpy(gSnoopCircuitIDList[i], val); 
+					
+                    rc = strcpy_s(gSnoopCircuitIDList[i], sizeof(gSnoopCircuitIDList[i]), val); 
+					if (rc != EOK)
+					{
+						ERR_CHK(rc);
+						return;
+					}
                     break;
                 }
             }
 
             for(i=0; i<kSnoop_MaxCircuitIDs; i++) {
-
-                if (strcmp(name, gSnoopSyseventSSIDs[i])==0) {
+                rc = strcmp_s(name, strlength,gSnoopSyseventSSIDs[i], &ind);
+                ERR_CHK(rc);
+                if ((ind == 0) && (rc == EOK)) {
                     CcspTraceInfo(("gSnoopSSIDListInt case\n"));
-                    strcpy(gSnoopSSIDList[i], val);
+					rc = strcpy_s(gSnoopSSIDList[i], sizeof(gSnoopSSIDList[i]), val); 
+					if (rc != EOK)
+					{
+						ERR_CHK(rc);
+						return;
+					}
                     gSnoopSSIDListInt[i] = atoi(val);
                     break;
                 }
@@ -1048,6 +1122,7 @@ static int hotspotfd_getStartupParameters(void)
     int status = STATUS_SUCCESS;
 	int i;
     char buf[kMax_IPAddressLength];
+	errno_t rc = -1;
 
     do {
         // Primary EP 
@@ -1058,7 +1133,12 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         if (hotspotfd_isValidIpAddress(buf)) {
-            strcpy(gpPrimaryEP, buf);
+			rc = strcpy_s(gpPrimaryEP, sizeof(gpPrimaryEP), buf); 
+			if (rc != EOK)
+			{
+				ERR_CHK(rc);
+				return STATUS_FAILURE;
+			}
 
             msg_debug("Loaded sysevent %s with %s\n", kHotspotfd_primary, gpPrimaryEP); 
         } else {
@@ -1076,7 +1156,12 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         if (hotspotfd_isValidIpAddress(buf)) {
-            strcpy(gpSecondaryEP, buf);
+			rc = strcpy_s(gpSecondaryEP, sizeof(gpSecondaryEP), buf); 
+			if (rc != EOK)
+			{
+				ERR_CHK(rc);
+				return STATUS_FAILURE;
+			}
 
             msg_debug("Loaded sysevent %s with %s\n", khotspotfd_secondary, gpSecondaryEP); 
         } else {
@@ -1299,8 +1384,14 @@ void hotspot_start()
 	time_t secondaryEndPointstartTime;
 	time_t currentTime ;
 	int timeElapsed;
+	errno_t rc = -1;
 
-    strcpy(gKeepAliveInterface, "erouter0");
+    rc = strcpy_s(gKeepAliveInterface, sizeof(gKeepAliveInterface), "erouter0");
+	if(rc != EOK)
+	{
+		ERR_CHK(rc);
+		return;
+	}
 	gKeepAliveEnable = true;
 
 #ifdef __HAVE_SYSEVENT__

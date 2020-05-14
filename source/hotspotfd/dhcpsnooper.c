@@ -54,6 +54,7 @@
 #include "ccsp_trace.h"
 
 #include <telemetry_busmessage_sender.h>
+#include "safec_lib_common.h"
 
 #define mylist_safe(p, q, h) \
          for (p = (h)->n, q = p->n; p != (h); \
@@ -153,6 +154,7 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
     snooper_priv_client_list * pNewClient;
     struct mylist_head * pos, * q;
     bool already_in_list = false;
+	errno_t rc = -1;
 
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
@@ -167,12 +169,22 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
     {
           CcspTraceInfo(("Client:%s is present update hostname:%s\n", pRemote_id, pHostname));
         /* Coverity Fix CID:135307 STRING_OVERFLOW*/
-        strncpy(pNewClient->client.hostname,pHostname,sizeof(pNewClient->client.hostname)-1);
+        rc = strcpy_s(pNewClient->client.hostname,sizeof(pNewClient->client.hostname), pHostname);
+		if(rc != EOK)
+		{
+			ERR_CHK(rc);
+			return;
+		}
         pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) ] = '\0';
     }
         /* Coverity Fix CID:135307 STRING_OVERFLOW */
         /* Coverity Fix CID:64398 DC. STRING_BUFFER */
-         strncpy(g_cHostnameForQueue[queue_number], pHostname, sizeof(g_cHostnameForQueue[queue_number]) - 1);
+        rc = strcpy_s(g_cHostnameForQueue[queue_number], sizeof(g_cHostnameForQueue[queue_number]), pHostname);
+		if(rc != EOK)
+		{
+			ERR_CHK(rc);
+			return;
+		}
          g_cHostnameForQueue[queue_number][sizeof(g_cHostnameForQueue[queue_number]) - 1] = '\0';
         
 }
@@ -187,6 +199,8 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
     char addr_str[INET_ADDRSTRLEN] = {0};
     char host_str[kSnooper_MaxHostNameLen] = {0};
     u_int8_t * option,*next_option;
+	errno_t rc = -1;
+	int ind = -1;
 	/* If we're not adding agent options to packets, we can skip
 	   this. */
 	if (!add_agent_options)
@@ -194,7 +208,8 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 
     u_int8_t * ptr,*max_len,*padding = NULL;
 
-    if (!memcmp(packet->options, DHCP_OPTIONS_COOKIE, 4)) {
+        if ( 0 != memcmp(packet->options, DHCP_OPTIONS_COOKIE, 4) )
+           return( length );
 
         max_len = ((u_int8_t *)packet) + gSnoopDhcpMaxAgentOptionLen;
         ptr = option = &packet->options[4];
@@ -226,7 +241,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 
                     /* Add the hostname to the client list */
                     if (*option == DHO_HOST_NAME) {
-                        memcpy(host_str, &option[2], option[1]);
+						rc = memcpy_s(host_str, sizeof(host_str), &option[2], option[1]);
+                        if(rc != EOK)
+                        {
+                          ERR_CHK(rc);
+                          return 0;
+                        }
                         host_str[option[1]] = '\0';
 
                         snooper_dbg("host_str: %s\n", host_str);
@@ -256,7 +276,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 
                     /* Add the hostname to the client list */
                     if (*option == DHO_HOST_NAME) {
-                        memcpy(host_str, &option[2], option[1]);
+						rc = memcpy_s(host_str, sizeof(host_str), &option[2], option[1]);
+                        if(rc != EOK)
+                        {
+                          ERR_CHK(rc);
+                          return 0;
+                        }
                         host_str[option[1]] = '\0';
 
                         snooper_dbg("host_str: %s\n", host_str);
@@ -288,7 +313,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 
                         /* Add the hostname to the client list */
                         if (*option == DHO_HOST_NAME) {
-                            memcpy(host_str, &option[2], option[1]);
+							rc = memcpy_s(host_str, sizeof(host_str), &option[2], option[1]);
+                            if(rc != EOK)
+                            {
+                               ERR_CHK(rc);
+                               return 0;
+                            }
                             host_str[option[1]] = '\0';
 
                             snooper_dbg("host_str: %s\n", host_str);
@@ -335,7 +365,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 
                     /* Add the hostname to the client list */
                     if (*option == DHO_HOST_NAME) {
-                        memcpy(host_str, &option[2], option[1]);
+						rc = memcpy_s(host_str, sizeof(host_str), &option[2], option[1]);
+                        if(rc != EOK)
+                        {
+                          ERR_CHK(rc);
+                          return 0;
+                        }
                         host_str[option[1]] = '\0';
 
                         snooper_dbg("host_str: %s\n", host_str);
@@ -354,9 +389,9 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
         }
 	
         /* Inserting MAC as Hostname if DHCP Message is not having Host Name */
-	if(0 == strcmp(host_str,""))
+	if( host_str[0] == '\0' )
 	{
-		snoop_AddClientListHostname(gRemote_id, gRemote_id, queue_number);
+	   snoop_AddClientListHostname(gRemote_id, gRemote_id, queue_number);
 	}
 
         if (bDHCP) {
@@ -393,7 +428,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     *ptr++ = RAI_CIRCUIT_ID;
                     *ptr++ = circuit_id_len;
 
-                    memcpy(ptr, gCircuit_id, circuit_id_len);
+                    rc = memcpy_s(ptr, circuit_id_len, gCircuit_id, circuit_id_len);
+                    if(rc != EOK)
+                    {
+                        ERR_CHK(rc);
+                        return 0;
+                    }             
                     ptr += circuit_id_len;
 
                     /* Copy in the remote id... */
@@ -402,7 +442,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     *ptr++ = RAI_REMOTE_ID;
                     *ptr++ = remote_id_len;
 
-                    memcpy(ptr, gRemote_id, remote_id_len);
+                    rc = memcpy_s(ptr, remote_id_len, gRemote_id, remote_id_len);
+                    if(rc != EOK)
+                    {
+                        ERR_CHK(rc);
+                        return 0;
+                    }  
                     ptr += remote_id_len;
 
                 } else if (gSnoopCircuitEnabled && !gSnoopRemoteEnabled) {
@@ -414,7 +459,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     *ptr++ = RAI_CIRCUIT_ID;
                     *ptr++ = circuit_id_len;
 
-                    memcpy(ptr, gCircuit_id, circuit_id_len);
+                    rc = memcpy_s(ptr, circuit_id_len, gCircuit_id, circuit_id_len);
+                    if(rc != EOK)
+                    {
+                        ERR_CHK(rc);
+                        return 0;
+                    }
                     ptr += circuit_id_len;
 
                 } else if (!gSnoopCircuitEnabled && gSnoopRemoteEnabled) {
@@ -426,7 +476,12 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
                     *ptr++ = RAI_REMOTE_ID;
                     *ptr++ = remote_id_len;
 
-                    memcpy(ptr, gRemote_id, remote_id_len);
+                    rc = memcpy_s(ptr, remote_id_len, gRemote_id, remote_id_len);
+                    if(rc != EOK)
+                    {
+                        ERR_CHK(rc);
+                        return 0;
+                    }
                     ptr += remote_id_len;
                 }
 
@@ -440,10 +495,10 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
 
             if (length < BOOTP_MIN_LEN) {
                 length =  BOOTP_MIN_LEN;
-                memset(ptr, DHO_PAD, BOOTP_MIN_LEN - length);
+                rc = memset_s(ptr, length, DHO_PAD, length);
+				ERR_CHK(rc);
             }
         }
-    }
 
     return length;
 }
@@ -473,6 +528,7 @@ void snoop_log(void)
 {
     FILE *logOut;
     int i = 0;
+	errno_t rc = -1;
     snooper_priv_client_list * pClient;
     struct mylist_head * pos, * q;
 
@@ -480,7 +536,8 @@ void snoop_log(void)
 
     if(!logOut) {
         CcspTraceError(("Could not open dhcp_snooperd.log file\n"));
-    } else {
+        return;
+    }
     
         fprintf(logOut, "gSnoopEnable: %d\n", gSnoopEnable);
         fprintf(logOut, "gSnoopDebugEnabled: %d\n", gSnoopDebugEnabled);
@@ -544,10 +601,14 @@ void snoop_log(void)
              printf("pClient->client.remote_id[%d]: %s\n", i, pClient->client.remote_id);
              printf("pClient->client.rssi[%d]: %d\n", i, pClient->client.rssi);
 
-             memcpy(&gpSnoop_Stats->snooper_clients[i], &pClient->client, sizeof(snooper_client_list));
+             rc = memcpy_s(&gpSnoop_Stats->snooper_clients[i],  sizeof(snooper_client_list), &pClient->client,  sizeof(snooper_client_list));
+             if(rc != EOK)
+             {
+                ERR_CHK(rc);
+                return ;
+             }
              i++;
         }
-    }
 }
 
 void snoop_RemoveClientListEntry(char *pRemote_id)
@@ -615,6 +676,7 @@ static void snoop_CheckClientIsPrivate(char *pRemote_id)
 static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id, 
                                   char *pDhcp_status, char *pIpv4_addr, char *pHostname, int rssi)
 {
+	errno_t rc = -1;
     snooper_priv_client_list * pNewClient;
     struct mylist_head * pos, * q;
     bool already_in_list = false;
@@ -636,21 +698,58 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
                         /* Coverity Fix CID:59806 NULL_RETURNS */	
                         if( pNewClient != NULL )
                         {
-                           memset(pNewClient, 0x00, sizeof(pNewClient));
+                           rc = memset_s(pNewClient, sizeof(snooper_priv_client_list), 0x00, sizeof(snooper_priv_client_list));
+						   ERR_CHK(rc);
            
                           if (NULL == pCircuit_id)
                           {
-                             strncpy(pNewClient->client.remote_id, pRemote_id,sizeof(pNewClient->client.remote_id) -1 );
-                             pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) ] = '\0';
+                             rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id );
+                             if(rc != EOK)
+							 {
+								 ERR_CHK(rc);
+								 free(pNewClient);
+								 return;
+							 }
+							 pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) ] = '\0';
                           }
                            else
                           {
                                 /* Coverity Fix  CID:135344,69252 STRING_OVERFLOW*/
-                                strncpy(pNewClient->client.remote_id, pRemote_id, sizeof(pNewClient->client.remote_id) -1 );
-                                strncpy(pNewClient->client.circuit_id, pCircuit_id, sizeof(pNewClient->client.circuit_id) -1 );
-                                strncpy(pNewClient->client.dhcp_status, pDhcp_status, sizeof(pNewClient->client.dhcp_status) -1 );
-                                strncpy(pNewClient->client.ipv4_addr, pIpv4_addr, sizeof(pNewClient->client.ipv4_addr) -1 );
-                                strncpy(pNewClient->client.hostname,  pHostname, sizeof(pNewClient->client.hostname) -1 );
+                                rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id );
+								if(rc != EOK)
+							    {
+								  ERR_CHK(rc);
+								  free(pNewClient);
+								  return;
+							    }
+                                rc = strcpy_s(pNewClient->client.circuit_id, sizeof(pNewClient->client.circuit_id), pCircuit_id);
+								if(rc != EOK)
+							    {
+								  ERR_CHK(rc);
+								  free(pNewClient);
+								  return;
+							    }
+                                rc = strcpy_s(pNewClient->client.dhcp_status, sizeof(pNewClient->client.dhcp_status), pDhcp_status );
+								if(rc != EOK)
+							    {
+								  ERR_CHK(rc);
+								  free(pNewClient);
+								  return;
+							    }
+                                rc = strcpy_s(pNewClient->client.ipv4_addr, sizeof(pNewClient->client.ipv4_addr), pIpv4_addr);
+								if(rc != EOK)
+							    {
+								  ERR_CHK(rc);
+								  free(pNewClient);
+								  return;
+							    }
+                                rc = strcpy_s(pNewClient->client.hostname,  sizeof(pNewClient->client.hostname), pHostname);
+								if(rc != EOK)
+							    {
+								  ERR_CHK(rc);
+								  free(pNewClient);
+								  return;
+							    }
                           }
                            pNewClient->client.rssi = rssi;
                            pNewClient->client.noOfTriesForOnlineCheck = 0; 
@@ -670,11 +769,36 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
         msg_debug("Client %s already in list.\n", pRemote_id);
 		if ((NULL != pCircuit_id && '\0' != pCircuit_id[0]))
 		{
-			strcpy(pNewClient->client.remote_id, pRemote_id);
-            strcpy(pNewClient->client.circuit_id, pCircuit_id);
-            strcpy(pNewClient->client.dhcp_status, pDhcp_status);
-            strcpy(pNewClient->client.ipv4_addr, pIpv4_addr);
-            strcpy(pNewClient->client.hostname, pHostname);
+			rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id);
+			if(rc != EOK)
+			{
+				ERR_CHK(rc);
+				return;
+			}
+			rc = strcpy_s(pNewClient->client.circuit_id, sizeof(pNewClient->client.circuit_id), pCircuit_id);
+			if(rc != EOK)
+			{
+				ERR_CHK(rc);
+				return;
+			}
+			rc = strcpy_s(pNewClient->client.dhcp_status, sizeof(pNewClient->client.dhcp_status), pDhcp_status);
+			if(rc != EOK)
+			{
+				ERR_CHK(rc);
+				return;
+			}
+			rc = strcpy_s(pNewClient->client.ipv4_addr, sizeof(pNewClient->client.ipv4_addr), pIpv4_addr);
+			if(rc != EOK)
+			{
+				ERR_CHK(rc);
+				return;
+			}
+			rc = strcpy_s(pNewClient->client.hostname, sizeof(pNewClient->client.hostname), pHostname);
+			if(rc != EOK)
+			{
+				ERR_CHK(rc);
+				return;
+			}
 		}
 		else
 		{
@@ -822,6 +946,7 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     int i;
     int j=0;
     int len = 0;
+	errno_t rc = -1;
     int new_data_len;
     unsigned char * pktData = NULL;
     struct iphdr *iph = NULL;
@@ -891,7 +1016,12 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
          (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Decline) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Release) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Inform))
         && gSnoopEnable && (gSnoopCircuitEnabled || gSnoopRemoteEnabled)) {
                                                            
-        strcpy(gCircuit_id, gSnoopCircuitIDList[queue_number]);
+        rc = strcpy_s(gCircuit_id, sizeof(gCircuit_id), gSnoopCircuitIDList[queue_number]);
+		if(rc != EOK)
+		{
+			ERR_CHK(rc);
+			return -1;
+		}
         msg_debug("gCircuit_id: %s\n", gCircuit_id);
 
         sprintf(gRemote_id, "%02x:%02x:%02x:%02x:%02x:%02x", 
@@ -965,7 +1095,12 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 		if (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Inform) 
 		{
 			inet_ntop(AF_INET, &(pktData[40]), ipv4_addr, INET_ADDRSTRLEN);
-			strcpy(g_cInformIpForQueue[queue_number], ipv4_addr);
+			rc = strcpy_s(g_cInformIpForQueue[queue_number], sizeof(g_cInformIpForQueue[queue_number]), ipv4_addr);
+		    if(rc != EOK)
+		    {
+		    	ERR_CHK(rc);
+			    return -1;
+		    }
 		}
 
 		if( pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Release) 
@@ -1047,7 +1182,12 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 
 			if( pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_ACK) 
 			{
-				strcpy(gCircuit_id, gSnoopCircuitIDList[queue_number]);
+				rc = strcpy_s(gCircuit_id, sizeof(gCircuit_id), gSnoopCircuitIDList[queue_number]);
+		        if(rc != EOK)
+		        {
+		        	ERR_CHK(rc);
+			        return -1;
+		        }
 		        msg_debug("gCircuit_id: %s\n", gCircuit_id);
        
 		     	// Copy client MAC address
@@ -1059,14 +1199,24 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 				char l_cHostName[kSnooper_MaxHostNameLen];
 				if (!snoop_isValidIpAddress(ipv4_addr) && snoop_isValidIpAddress(g_cInformIpForQueue[queue_number]))
 				{
-					strcpy(ipv4_addr,g_cInformIpForQueue[queue_number]);
+					rc = strcpy_s(ipv4_addr, sizeof(ipv4_addr), g_cInformIpForQueue[queue_number]);
+		            if(rc != EOK)
+		            {
+		            	ERR_CHK(rc);
+			            return -1;
+		            }
 					CcspTraceWarning(("ipaddress in DHCP ACK is 0.0.0.0 get it from inform:%s\n", ipv4_addr));					
 					if (!snoop_isValidIpAddress(ipv4_addr))
 					{
 						CcspTraceWarning(("IP Address in DHCP Inform is also not valid something went wrong"));
 					}
 				}
-				strcpy(l_cHostName, g_cHostnameForQueue[queue_number]);
+				rc = strcpy_s(l_cHostName, sizeof(l_cHostName), g_cHostnameForQueue[queue_number]);
+		        if(rc != EOK)
+		        {
+		          	ERR_CHK(rc);
+			        return -1;
+		        }
 				snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName, 0);
                 snoop_CheckClientIsPrivate(gRemote_id);  
         	}
@@ -1110,7 +1260,8 @@ void *dhcp_snooper_init(void *data)
     struct nfq_handle *nfqHandle = NULL;
     struct nfq_q_handle *myQueue = NULL;
     struct nfnl_handle *netlinkHandle = NULL;
-    int status = 0; 
+    int status = 0;
+    errno_t rc = -1;	
     int fd = 0, res = 0, i =0, j=0;
     char buf[4096] = {0};
 
@@ -1159,8 +1310,18 @@ void *dhcp_snooper_init(void *data)
     msg_debug("%s fd=%d\n", __func__, fd);
     SET_LIST_HEAD(&gSnoop_ClientList.list);
 
-    strcpy(gCircuit_id, kSnoop_DefaultCircuitID);
-    strcpy(gRemote_id, kSnoop_DefaultRemoteID); 
+    rc = strcpy_s(gCircuit_id, sizeof(gCircuit_id), kSnoop_DefaultCircuitID);
+	if(rc != EOK)
+	{
+		ERR_CHK(rc);
+		return;
+	}
+	rc = strcpy_s(gRemote_id, sizeof(gRemote_id), kSnoop_DefaultRemoteID);
+	if(rc != EOK)
+	{
+		ERR_CHK(rc);
+		return;
+	}
 
 	CcspTraceInfo(("dhcp_snooper thread inited\n"));
     snoop_log();

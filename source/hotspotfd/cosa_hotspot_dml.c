@@ -71,13 +71,18 @@
 #include "dhcpsnooper.h"
 
 #include <telemetry_busmessage_sender.h>
+#include "safec_lib_common.h"
 
 BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* ParamName, char* strValue)
 {
 	int l_iAddOrDelete, l_iSsidIndex, l_iRssi; 
     char l_cMacAddr[20] = {0};
+	errno_t rc = -1;
+	int ind = -1;
 
-	if (AnscEqualString(ParamName, "ClientChange", TRUE))
+    rc = strcmp_s("ClientChange", strlen("ClientChange"),ParamName, &ind);
+    ERR_CHK(rc);
+    if ((ind == 0) && (rc == EOK))
     {   
 		sscanf(strValue, "%d|%d|%d|%s", &l_iAddOrDelete, &l_iSsidIndex, &l_iRssi, l_cMacAddr);
 		if (1 == l_iAddOrDelete)
@@ -94,6 +99,7 @@ BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* P
 		}	
         return TRUE;
     }
+    return FALSE;
 }
 
 ULONG
@@ -105,8 +111,12 @@ HotspotConnectedDevice_GetParamStringValue
         ULONG*                      pUlSize
     )
 {
+	errno_t rc = -1;
+	int ind = -1;
     /* check the parameter name and return the corresponding value */
-    if( AnscEqualString(ParamName, "ClientChange", TRUE))
+	rc = strcmp_s("ClientChange", strlen("ClientChange"),ParamName, &ind);
+    ERR_CHK(rc);
+    if ((ind == 0) && (rc == EOK))
     {
         return 0;
     }

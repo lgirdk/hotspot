@@ -56,6 +56,7 @@
 #include "plugin_main.h"
 #include "hotspotfd.h"
 #include "dm_pack_create_func.h"
+#include "safec_lib_common.h"
 
 PDSLH_CPE_CONTROLLER_OBJECT     pDslhCpeController        = NULL;
 PCOMPONENT_COMMON_HOTSPOT          g_pComponent_COMMON_hotspot  = NULL;
@@ -81,6 +82,8 @@ ssp_create
     {
         return ANSC_STATUS_RESOURCES;
     }
+	
+	errno_t rc = -1;
 
     ComponentCommonDmInit( g_pComponent_COMMON_hotspot);
 
@@ -97,9 +100,12 @@ ssp_create
         {
             return ANSC_STATUS_RESOURCES;
         }
-        else
-        {
-            AnscCopyString(pSsdCcdIf->Name, CCSP_CCD_INTERFACE_NAME);
+                rc = strcpy_s(pSsdCcdIf->Name, sizeof(pSsdCcdIf->Name), CCSP_CCD_INTERFACE_NAME);
+	        if(rc != EOK)
+	        {
+		       ERR_CHK(rc);
+		       return ANSC_STATUS_FAILURE;
+	        }
 
             pSsdCcdIf->InterfaceId              = CCSP_CCD_INTERFACE_ID;
             pSsdCcdIf->hOwnerContext            = NULL;
@@ -119,7 +125,6 @@ ssp_create
             pSsdCcdIf->GetMemConsumed           = ssp_CcdIfGetMemConsumed;
             pSsdCcdIf->ApplyChanges             = ssp_CcdIfApplyChanges;
         }
-    }
 
     /* Create ComponentCommonDatamodel interface*/
     if ( !pDslhLcbIf )
@@ -130,16 +135,18 @@ ssp_create
         {
             return ANSC_STATUS_RESOURCES;
         }
-        else
-        {
-            AnscCopyString(pDslhLcbIf->Name, CCSP_LIBCBK_INTERFACE_NAME);
+                rc = strcpy_s(pDslhLcbIf->Name, sizeof(pDslhLcbIf->Name), CCSP_LIBCBK_INTERFACE_NAME);
+	        if(rc != EOK)
+	        {
+		       ERR_CHK(rc);
+		       return ANSC_STATUS_FAILURE;
+	        }
 
             pDslhLcbIf->InterfaceId              = CCSP_LIBCBK_INTERFACE_ID;
             pDslhLcbIf->hOwnerContext            = NULL;
             pDslhLcbIf->Size                     = sizeof(DSLH_LCB_INTERFACE);
 
             pDslhLcbIf->InitLibrary              = COSA_Init;
-        }
     }
 
     pDslhCpeController = DslhCreateCpeController(NULL, NULL, NULL);

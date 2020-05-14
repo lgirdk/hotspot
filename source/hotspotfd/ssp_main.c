@@ -40,6 +40,7 @@
 #include "stdlib.h"
 #include "ccsp_dm_api.h"
 #include "hotspotfd.h"
+#include "safec_lib_common.h"
 
 #define DEBUG_INI_NAME "/etc/debug.ini"
 extern char*                                pComponentName;
@@ -193,6 +194,8 @@ int main(int argc, char* argv[])
     BOOL bRunAsDaemon = TRUE;
     int cmdChar = 0;
     int idx = 0;
+	errno_t rc = -1;
+	int ind = -1;
 
     extern ANSC_HANDLE bus_handle;
     char *subSys = NULL;  
@@ -201,12 +204,19 @@ int main(int argc, char* argv[])
 
     for (idx = 1; idx < argc; idx++)
     {
-        if ((strcmp(argv[idx], "-subsys") == 0))
+		rc = strcmp_s("-subsys", strlen("-subsys"),argv[idx], &ind);
+        ERR_CHK(rc);
+        if ((ind == 0) && (rc == EOK))
         {
             /*Coverity Fix CID:135244 STRING_SIZE */
             if( (idx+1) < argc )
             {  
-               strncpy(g_Subsystem, argv[idx+1],sizeof(g_Subsystem));
+               rc = strcpy_s(g_Subsystem, sizeof(g_Subsystem), argv[idx+1]);
+			   if(rc != EOK)
+			   {
+				   ERR_CHK(rc);
+				   return -1;
+			   }
             }
             else
             {
@@ -215,30 +225,53 @@ int main(int argc, char* argv[])
             } 
             
         }
-        else if (strcmp(argv[idx], "-c") == 0)
+        else
         {
-            bRunAsDaemon = FALSE;
-        }
-        else if ((strcmp(argv[idx], "-DEBUG") == 0))
-        {
-            consoleDebugEnable = 1;
-            fprintf(stderr, "DEBUG ENABLE ON \n");
-        }
-        else if ( (strcmp(argv[idx], "-LOGFILE") == 0) )
-        {
-            // We assume argv[1] is a filename to open
-            debugLogFile = fopen( argv[idx + 1], "a+" );
+			rc = strcmp_s("-c", strlen("-c"),argv[idx], &ind);
+            ERR_CHK(rc);
+            if ((ind == 0) && (rc == EOK))
+			{
+                bRunAsDaemon = FALSE;
+			}
+            else
+            {
+			    rc = strcmp_s("-DEBUG", strlen("-DEBUG"),argv[idx], &ind);
+                ERR_CHK(rc);
+                if ((ind == 0) && (rc == EOK))
+				{
+                   consoleDebugEnable = 1;
+                   fprintf(stderr, "DEBUG ENABLE ON \n");
+                }
+                else
+                {
+		    rc = strcmp_s("-LOGFILE", strlen("-LOGFILE"),argv[idx], &ind);
+                    ERR_CHK(rc);
+                    if ((ind == 0) && (rc == EOK))
+		    {
+                        if( (idx+1) < argc )
+                        {
+                           // We assume argv[1] is a filename to open
+                           debugLogFile = fopen( argv[idx + 1], "a+" );
 
-            /* fopen returns 0, the NULL pointer, on failure */
-            if ( debugLogFile == 0 )
-            {
-                debugLogFile = stderr;
-                fprintf(debugLogFile, "Invalid Entry for -LOGFILE input \n" );
-            }
-            else 
-            {
-                fprintf(debugLogFile, "Log File [%s] Opened for Writing in Append Mode \n",  argv[idx+1]);
-            }
+                           /* fopen returns 0, the NULL pointer, on failure */
+                           if ( debugLogFile == 0 )
+                           {
+                               debugLogFile = stderr;
+                               fprintf(debugLogFile, "Invalid Entry for -LOGFILE input \n" );
+                           }
+                           else 
+                           {
+                               fprintf(debugLogFile, "Log File [%s] Opened for Writing in Append Mode \n",  argv[idx+1]);
+                           }
+                        }
+                        else
+                        {
+                           debugLogFile = stderr;
+                           fprintf(debugLogFile, "Invalid Entry for -LOGFILE input \n" );
+                        }
+					}
+				}
+			}
 
         }        
     }
