@@ -37,6 +37,7 @@
 **********************************************************************************/
 
 #include "ssp_global.h"
+#include "safec_lib_common.h"
 
 
 ANSC_HANDLE                 bus_handle               = NULL;
@@ -101,6 +102,8 @@ ssp_Mbi_MessageBusEngage
                 Ansc_AllocateMemory_Callback,           /* mallocfc, use default */
                 Ansc_FreeMemory_Callback                /* freefc,   use default */
             );
+			
+	errno_t rc = -1;
 
     if ( returnStatus != ANSC_STATUS_SUCCESS )
     {
@@ -111,7 +114,13 @@ ssp_Mbi_MessageBusEngage
 
     CcspTraceInfo(("INFO: bus_handle: 0x%8x \n", bus_handle));
     g_MessageBusHandle_Irep = bus_handle;
-    AnscCopyString(g_SubSysPrefix_Irep, g_Subsystem);
+	
+    rc = strcpy_s(g_SubSysPrefix_Irep, sizeof(g_SubSysPrefix_Irep), g_Subsystem);
+	if(rc != EOK)
+	{
+		ERR_CHK(rc);
+		return ANSC_STATUS_FAILURE;
+	}
 
     CCSP_Msg_SleepInMilliSeconds(1000);
 

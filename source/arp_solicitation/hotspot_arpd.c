@@ -59,6 +59,7 @@
 #include <sys/ioctl.h>
 #include <pthread.h>
 #include "libnetfilter_queue/libnetfilter_queue.h"
+#include "safec_lib_common.h"
 
 /**************************************************
 ******** MACRO DEFINITIONS **************************
@@ -191,6 +192,7 @@ static void signal_init(void)
 int main (int argc, char *argv[])
 {
     int opt, rc = -1;
+	errno_t rc1 = -1;
     
     while ((opt = getopt(argc, argv, "i:q:vdh")) != -1){
         switch(opt){
@@ -202,7 +204,12 @@ int main (int argc, char *argv[])
             break;
         case 'i':   /* interface name */
             /* Coverity Fix CID:135541 BUFFER_SIZE_WARNING */
-            strncpy(erouter.ifname, optarg, sizeof(erouter.ifname) -1);
+		    rc1 = strcpy_s(erouter.ifname, sizeof(erouter.ifname), optarg);
+            if(rc1 != EOK)
+			{
+			    ERR_CHK(rc);
+				return -1;
+			}
             DPRINTF("Interface name %s provided!\n", erouter.ifname);
             break;
         case 'q':
@@ -277,6 +284,7 @@ static int get_interface_by_ifname(if_t *target)
 {
     int fd;
     struct ifreq req;
+	errno_t rc = -1;
 
     if ((NULL == target) && (NULL == target->ifname)){
         printf("Invalid parameters!\n");
@@ -290,14 +298,26 @@ static int get_interface_by_ifname(if_t *target)
     }
 
     bzero(&req, sizeof(req));
-    strncpy(req.ifr_name, target->ifname, sizeof(req.ifr_name) -1);
+	rc = strcpy_s(req.ifr_name, sizeof(req.ifr_name), target->ifname);
+    if(rc != EOK)
+	{
+	    ERR_CHK(rc);
+		close(fd);
+		return FALSE;
+	}
     req.ifr_name[sizeof(req.ifr_name)-1] = '\0';
     if (ioctl(fd, SIOCGIFHWADDR, &req) == -1){
         printf("Failed to ioctl SIOCGIFHWADDR!\n");
         close(fd);
         return FALSE;
     }
-    memcpy(target->mac, &req.ifr_hwaddr.sa_data[0], ETH_ALEN);
+	rc = memcpy_s(target->mac, sizeof(target->mac), &req.ifr_hwaddr.sa_data[0], ETH_ALEN);
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		close(fd);
+        return FALSE;
+    }
 
     if (ioctl(fd, SIOCGIFINDEX, &req) == -1){
         printf("Failed to ioctl SIOCGIFINDEX!\n");
@@ -372,6 +392,7 @@ static int is_a_valid_gre_arp_request(unsigned char* arp_packet)
     struct iphdr *pIphdr;
     unsigned char sender_ip[4];
     unsigned char *pArpReq;
+    errno_t rc = -1;
 
     pIphdr = (struct iphdr *)arp_packet;
     arp_packet += (pIphdr->ihl << 2) + 8;   /*skip original ip and icmp header*/
@@ -384,7 +405,12 @@ static int is_a_valid_gre_arp_request(unsigned char* arp_packet)
     DPRINTF("ARP reply: GRE header done!\n");
 
     pArpReq += 8;
-    memcpy(sender_ip, &pArpReq[6], IP_ALEN);
+	rc = memcpy_s(sender_ip, sizeof(sender_ip), &pArpReq[6], IP_ALEN);
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+        return FALSE;
+    }
     return (arp_isValidIpAddress(sender_ip));
 }
 
@@ -408,7 +434,8 @@ build_gre_arp_reply_packet(
     unsigned char sender_ip[4], target_ip[4];
     unsigned long _beIp;
     unsigned char *pArpReq;
-
+    errno_t rc = -1;
+	
     pIphdr = (struct iphdr *)packet;
     packet += (pIphdr->ihl << 2) + 8;   /*skip original ip and icmp header*/
     *length -= (pIphdr->ihl << 2) + 8;
@@ -435,14 +462,57 @@ build_gre_arp_reply_packet(
     pArp->opcode   = ARPOP_REPLY;
 
     pArpReq += 8;
-    memcpy(sender_mac, &pArpReq[0], ETH_ALEN);
-    memcpy(sender_ip, &pArpReq[6], IP_ALEN);
-    memcpy(target_ip, &pArpReq[16], IP_ALEN);
+	
+	rc = memcpy_s(sender_mac, sizeof(sender_mac), &pArpReq[0], ETH_ALEN);
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }
+	rc = memcpy_s(sender_ip, sizeof(sender_ip), &pArpReq[6], IP_ALEN);
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }
+	rc = memcpy_s(target_ip, sizeof(target_ip), &pArpReq[16], IP_ALEN);
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }
     
-    memcpy(&pArpReq[0], erouter.mac, ETH_ALEN);       /* sender hardware address */
-    memcpy(&pArpReq[6], target_ip, IP_ALEN);          /* sender protocol address */
-    memcpy(&pArpReq[10], sender_mac, ETH_ALEN);       /* target hardware address */
-    memcpy(&pArpReq[16], sender_ip, IP_ALEN);         /* target protocol address */    
+	rc = memcpy_s(&pArpReq[0], ETH_ALEN, erouter.mac, ETH_ALEN);   /* sender hardware address */
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }
+    rc = memcpy_s(&pArpReq[6], IP_ALEN, target_ip, IP_ALEN);       /* sender protocol address */
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }
+    rc = memcpy_s(&pArpReq[10], ETH_ALEN, sender_mac, ETH_ALEN);  /* target hardware address */
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }      
+    rc = memcpy_s(&pArpReq[16], IP_ALEN, sender_ip, IP_ALEN);  /* target protocol address */ 
+    if(rc != EOK)
+    {
+        ERR_CHK(rc);
+		*length = 0;
+        return NULL;
+    }            
     DPRINTF("ARP reply: arp payload done!\n");
 
     return packet;
