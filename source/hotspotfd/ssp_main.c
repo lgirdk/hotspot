@@ -205,6 +205,7 @@ int main(int argc, char* argv[])
     DmErr_t err;
     debugLogFile = stderr;
 
+    t2_init("ccsp-hotspot");
 
      for (idx = 1; idx < argc; idx++)
     {
