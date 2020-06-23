@@ -1408,12 +1408,8 @@ Try_primary:
             } else {
 
                 gPrimaryIsAlive = false;
-                pthread_mutex_lock(&keep_alive_mutex);
-                gbFirstPrimarySignal = true;
-                pthread_mutex_unlock(&keep_alive_mutex);
-
-		CcspTraceInfo(("Primary GRE flag set to %d in else\n", gbFirstPrimarySignal));				
                 keepAliveThreshold++;
+                CcspTraceInfo(("keepAliveThreshold value %d \n", keepAliveThreshold));
 				//if (gKeepAliveEnable == false) continue;
 				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                 //if (gKeepAliveEnable == false) continue;
@@ -1426,6 +1422,11 @@ Try_primary:
                     gPrimaryIsActive = false;
                     gSecondaryIsActive = true;
 				
+                    pthread_mutex_lock(&keep_alive_mutex);
+                    gbFirstPrimarySignal = true;
+                    pthread_mutex_unlock(&keep_alive_mutex);
+
+		    CcspTraceInfo(("Primary GRE flag set to %d in else\n", gbFirstPrimarySignal));				
 	//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
                        /* Coverity FiX CID: 140440 MISSING_LOCK */  
                        pthread_mutex_lock(&keep_alive_mutex);
