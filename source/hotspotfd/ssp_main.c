@@ -193,7 +193,7 @@ void sig_handler(int sig)
 
 int main(int argc, char* argv[])
 {
-    ANSC_STATUS returnStatus = ANSC_STATUS_SUCCESS;
+  
     BOOL bRunAsDaemon = TRUE;
     int cmdChar = 0;
     int idx = 0;
@@ -205,79 +205,90 @@ int main(int argc, char* argv[])
     DmErr_t err;
     debugLogFile = stderr;
 
-    for (idx = 1; idx < argc; idx++)
+
+     for (idx = 1; idx < argc; idx++)
     {
-		rc = strcmp_s("-subsys", strlen("-subsys"),argv[idx], &ind);
-        ERR_CHK(rc);
-        if ((ind == 0) && (rc == EOK))
-        {
-            /*Coverity Fix CID:135244 STRING_SIZE */
-            if( (idx+1) < argc )
-            {  
-               rc = strcpy_s(g_Subsystem, sizeof(g_Subsystem), argv[idx+1]);
-			   if(rc != EOK)
-			   {
-				   ERR_CHK(rc);
-				   return -1;
-			   }
-            }
-            else
-            {
-                fprintf(stderr, "Missing in -subsys \n");
-                exit(0);
-            } 
+                rc = strcmp_s("-subsys", strlen("-subsys"),argv[idx], &ind);      
+                 ERR_CHK(rc);        
+                 if ((ind == 0) && (rc == EOK))
+                 {
+                        /*Coverity Fix CID:135244 STRING_SIZE */
+                         if( (idx+1) < argc )
+                         {  
+                            rc = strcpy_s(g_Subsystem, sizeof(g_Subsystem), argv[idx+1]);
+			   
+                            if(rc != EOK)
+			   
+                            {
+				   
+                                  ERR_CHK(rc);
+				   
+                                   return -1;
+			
+                             }
+                         }
+                          else
+                          {
+                              CcspTraceError(("Missing in -subsys \n"));
+                               exit(0);
+                          } 
             
-        }
-        else
-        {
-			rc = strcmp_s("-c", strlen("-c"),argv[idx], &ind);
-            ERR_CHK(rc);
-            if ((ind == 0) && (rc == EOK))
-			{
-                bRunAsDaemon = FALSE;
-			}
-            else
-            {
-			    rc = strcmp_s("-DEBUG", strlen("-DEBUG"),argv[idx], &ind);
-                ERR_CHK(rc);
-                if ((ind == 0) && (rc == EOK))
-				{
-                   consoleDebugEnable = 1;
-                   fprintf(stderr, "DEBUG ENABLE ON \n");
-                }
-                else
-                {
-		    rc = strcmp_s("-LOGFILE", strlen("-LOGFILE"),argv[idx], &ind);
-                    ERR_CHK(rc);
-                    if ((ind == 0) && (rc == EOK))
-		    {
-                        if( (idx+1) < argc )
-                        {
-                           // We assume argv[1] is a filename to open
-                           debugLogFile = fopen( argv[idx + 1], "a+" );
-
-                           /* fopen returns 0, the NULL pointer, on failure */
-                           if ( debugLogFile == 0 )
-                           {
-                               debugLogFile = stderr;
-                               fprintf(debugLogFile, "Invalid Entry for -LOGFILE input \n" );
+                 }
+                 else
+                 {
+			
+                          rc = strcmp_s("-c", strlen("-c"),argv[idx], &ind);
+            
+                          ERR_CHK(rc);
+           
+                          if ((ind == 0) && (rc == EOK))
+			
+                          {
+                              bRunAsDaemon = FALSE;
+			
+                          }
+                           else
+                          {
+			    
+                              rc = strcmp_s("-DEBUG", strlen("-DEBUG"),argv[idx], &ind);
+                
+                              ERR_CHK(rc);
+                
+                              if ((ind == 0) && (rc == EOK))
+				
+                              {
+                                  consoleDebugEnable = 1;
+                                   fprintf(debugLogFile, "DEBUG ENABLE ON\n");
+                              }
+                               else
+                              { 
+                                 rc = strcmp_s("-LOGFILE", strlen("-LOGFILE"),argv[idx], &ind);                   
+                                 ERR_CHK(rc);
+                                 if ((ind == 0) && (rc == EOK))
+                                 {
+                                       if( (idx+1) < argc )
+                                       {          
+                                           FILE *fp = fopen(argv[idx+1], "a+");
+                                            if (! fp) 
+                                            {
+                                                 fprintf(debugLogFile, "Cannot open -LOGFILE %s\n", argv[idx+1]);
+                                            } 
+                                            else
+                                            {
+                                                   fclose(debugLogFile);
+                                                    debugLogFile = fp;
+                                                   fprintf(debugLogFile, "Log File [%s] Opened for Writing in Append Mode \n",  argv[idx+1]);
+                                             }
+      
+                                        }
+                    
+                                   }
+                   
+                                }  
+              
                            }
-                           else 
-                           {
-                               fprintf(debugLogFile, "Log File [%s] Opened for Writing in Append Mode \n",  argv[idx+1]);
-                           }
-                        }
-                        else
-                        {
-                           debugLogFile = stderr;
-                           fprintf(debugLogFile, "Invalid Entry for -LOGFILE input \n" );
-                        }
-					}
-				}
-			}
-
-        }        
-    }
+                     } 
+     }
 
     pComponentName = CCSP_COMPONENT_NAME_HOTSPOT;
 

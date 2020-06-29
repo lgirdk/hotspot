@@ -154,8 +154,7 @@ static bool gBothDnFirstSignal = false;
 static bool gTunnelIsUp = false;
 
 static pthread_t dhcp_snooper_tid;
-static pthread_t dhcp_snooper_sysevent_tid;
-static pthread_t lm_tid;
+
 int gSnoopNumberOfClients = 0; //shared variable across hotspotfd and dhcp_snooperd
 
 bool gSnoopEnable = true;
@@ -265,11 +264,13 @@ static bool set_validatessid() {
     parameterValStruct_t  *param_val = NULL;
     char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
     char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
-    const char ap5[]="Device.WiFi.SSID.5.Enable";
-    const char ap6[]="Device.WiFi.SSID.6.Enable";
-    const char ap9[]="Device.WiFi.SSID.9.Enable";
-    const char ap10[]="Device.WiFi.SSID.10.Enable";
-    char *paramNames[]={ap5,ap6,ap9,ap10};
+      /* Coverity Fix: CID 104508 bad initializer */
+    const char *paramNames[] = {
+        "Device.WiFi.SSID.5.Enable",
+        "Device.WiFi.SSID.6.Enable",
+        "Device.WiFi.SSID.9.Enable",
+        "Device.WiFi.SSID.10.Enable" };
+  
     char* faultParam      = NULL;
     int   ret             = 0; 
     int i = 0;
@@ -322,7 +323,7 @@ static bool set_validatessid() {
     if(param_val)
     {
         free(param_val);
-        param_val = NULL;
+        
     }
     ssid_reset_mask = 0;
     return TRUE;
@@ -451,7 +452,7 @@ static int _hotspotfd_ping(char *address)
     int loop;
     struct hostent *hname;
     struct sockaddr_in addr_ping,*addr;
-    int pid = -1;
+   
     struct protoent *proto = NULL;
     int cnt = 1;
     int status = STATUS_FAILURE;
@@ -464,7 +465,8 @@ static int _hotspotfd_ping(char *address)
     // per keep alive interval
     unsigned keepAliveCount = gKeepAliveCount;
 printf("------- ping >>\n");
-    pid = getpid();
+     /*Coverity Fix CID 63000 unused value */
+     int pid = getpid();
     proto = getprotobyname("ICMP");
     hname = gethostbyname(address);
     bzero(&addr_ping, sizeof(addr_ping));
@@ -484,14 +486,14 @@ printf("------- ping >>\n");
     addr = &addr_ping;
 
     sd = socket(PF_INET, SOCK_RAW, proto->p_proto);
-	msg_debug("%s sd=%d\n", __func__, sd);
-    do {
-
-        if ( sd < 0 ) {
+    if ( sd < 0 ) {
             perror("socket");
-            status = STATUS_FAILURE;
-            break;
-        }
+            msg_debug("%s sd=%d\n", __func__, sd);
+             return STATUS_FAILURE;
+          
+      }
+	
+    do {
 
         // Bind to a specific interface only 
         rc = memset_s(&ifr, sizeof(ifr), 0, sizeof(ifr));
@@ -500,9 +502,12 @@ printf("------- ping >>\n");
 		if(rc != EOK)
 		{
 			ERR_CHK(rc);
+                          /* Coverity Fix CID 151796 RESOURCE_LEAK */
+                         close(sd);
 			return STATUS_FAILURE;
 		}
-        ifr.ifr_name[ sizeof(ifr.ifr_name) ] = '\0';
+        /*Coverity Fix CID 144091 Buffer Overflow */
+        ifr.ifr_name[ sizeof(ifr.ifr_name) -1 ] = '\0';
         
         if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
             perror("Error on SO_BINDTODEVICE");
@@ -586,9 +591,8 @@ printf("------- ping >>\n");
 
     } while (--keepAliveCount);
 
-    if ( sd >= 0 ) {
-        close(sd);
-    }
+    close(sd);
+    
 /* Coverity Fix CID :124917 PRINTF_ARGS*/
 printf("------- ping %d << status\n",status);
     return status;
@@ -996,6 +1000,7 @@ bool deleteSharedMem(int key, bool snooper)
                 {
                     perror("shmat error");
                     snStats = NULL;
+                    perror("shmat error");
                     return false;
                 }
                 if (shmdt(snStats))
@@ -1010,6 +1015,7 @@ bool deleteSharedMem(int key, bool snooper)
                 {
                     perror("shmat error");
                     htStats = NULL;
+                    perror("shmat error");
                     return false;
                 }
                 if (shmdt(htStats))
@@ -1365,20 +1371,9 @@ static int hotspotfd_getStartupParameters(void)
 }
 #endif
 
-static void hotspotfd_usage(void)
-{
-    printf("  Usage:  hotspotfd [-p<primary tunnel EP IP Address>] [-s<secondary tunnel EP IP Address>]\n");
-    printf("                    [-i<keep alive interval (secs)>] [-t<keep alive threshold (multiple of intervals)>]\n");
-    printf("                    [-m<maximum secondary EP time (secs)>] [-e<enable 0 or 1>} [-l<log enable 0 or 1>]\n");
-    printf("                    [-n<network interface name>]\n\n");
-
-    exit(0);
-}
 
 void hotspot_start()
 {
-    int cmd;
-    bool run_in_foreground = false;
     unsigned int keepAliveThreshold = 0;
     unsigned int secondaryKeepAlives = 0;
 	time_t secondaryEndPointstartTime;
@@ -1698,6 +1693,5 @@ Try_secondary:
     }
 
     goto keep_it_alive;
-
-    exit(0);
+    
 }
