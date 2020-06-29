@@ -108,7 +108,7 @@ extern int gSnoopFirstQueueNumber;
 extern int gSnoopNumberOfQueues;
 
 extern int gSnoopNumberOfClients;
-static int snoop_sysevent_fd;
+
 
 extern int gSnoopMaxNumberOfClients;
 extern char gSnoopCircuitIDList[kSnoop_MaxCircuitIDs][kSnoop_MaxCircuitLen];
@@ -175,7 +175,8 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
 			ERR_CHK(rc);
 			return;
 		}
-        pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) ] = '\0';
+        /*Coverity Fix CID 144092 Buffer Overflow*/
+        pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) -1 ] = '\0';
     }
         /* Coverity Fix CID:135307 STRING_OVERFLOW */
         /* Coverity Fix CID:64398 DC. STRING_BUFFER */
@@ -397,8 +398,6 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
         if (bDHCP) {
 
             if (padding != NULL) ptr = padding;
-
-            option = ptr;
 
             circuit_id_len = strlen(gCircuit_id);
             remote_id_len = strlen(gRemote_id);
@@ -710,7 +709,8 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
 								 free(pNewClient);
 								 return;
 							 }
-							 pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) ] = '\0';
+                                                         /* Coverity Fix CID: 144090 Buffer Overflow*/
+							 pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) -1] = '\0';
                           }
                            else
                           {
@@ -810,15 +810,10 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
 
 static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number)
 {
-    int is_dhcp = 0, mms;
-    unsigned optlen;
+    int  is_dhcp=0,mms,l_iSkipBytes = 0,count = 0;
     u_int8_t *op = NULL, *nextop = NULL, *sp = NULL, *max = NULL, *end_pad = NULL;
 
     int circuit_id_len; 
-    int remote_id_len;
-    char addr_str[INET_ADDRSTRLEN];
-    char host_str[kSnooper_MaxHostNameLen];
-
     max = ((u_int8_t *)packet) + gSnoopDhcpMaxAgentOptionLen;
 
     /* Commence processing after the cookie. */
@@ -884,7 +879,7 @@ static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned le
 			
 	    op = nextop;
 	    //>>zqiu: to fix the busy loop
-	    int count=0;
+	   
 	    while (*op != DHO_END)
 	    {
 		count++;
@@ -963,7 +958,9 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     }
 
     // bootp starts at pktData[28] 
-    len = nfq_get_payload(pkt, &pktData);
+    if((len = nfq_get_payload(pkt, &pktData)) == -1)
+            printf("%s:%d>  nfq_get_payload is failed \n", __FUNCTION__, __LINE__);
+		
 
     if(gSnoopDebugEnabled) {
         if (len) {
