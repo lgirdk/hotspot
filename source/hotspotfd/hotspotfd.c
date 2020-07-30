@@ -1557,7 +1557,7 @@ Try_primary:
                         gBothDnFirstSignal = false;
 
                         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
-                                         kHotspotfd_tunnelEP, "\0", 0)) {
+                                         kHotspotfd_tunnelEP, "", 0)) {
 
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
@@ -1695,7 +1695,7 @@ Try_secondary:
                         gBothDnFirstSignal = false;
 
                         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
-                                         kHotspotfd_tunnelEP, "\0", 0)) {
+                                         kHotspotfd_tunnelEP, "", 0)) {
 
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
