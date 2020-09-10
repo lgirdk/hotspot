@@ -1319,13 +1319,13 @@ void *dhcp_snooper_init(void *data)
 	if(rc != EOK)
 	{
 		ERR_CHK(rc);
-		return;
+		return NULL;
 	}
 	rc = strcpy_s(gRemote_id, sizeof(gRemote_id), kSnoop_DefaultRemoteID);
 	if(rc != EOK)
 	{
 		ERR_CHK(rc);
-		return;
+		return NULL;
 	}
 
 	CcspTraceInfo(("dhcp_snooper thread inited\n"));
