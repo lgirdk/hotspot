@@ -175,7 +175,7 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
 			ERR_CHK(rc);
 			return;
 		}
-        pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) ] = '\0';
+        pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) - 1 ] = '\0';
     }
         /* Coverity Fix CID:135307 STRING_OVERFLOW */
         /* Coverity Fix CID:64398 DC. STRING_BUFFER */
@@ -710,7 +710,7 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
 								 free(pNewClient);
 								 return;
 							 }
-							 pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) ] = '\0';
+							 pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) - 1 ] = '\0';
                           }
                            else
                           {
