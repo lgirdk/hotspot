@@ -502,7 +502,7 @@ printf("------- ping >>\n");
 			ERR_CHK(rc);
 			return STATUS_FAILURE;
 		}
-        ifr.ifr_name[ sizeof(ifr.ifr_name) ] = '\0';
+        ifr.ifr_name[ sizeof(ifr.ifr_name) - 1 ] = '\0';
         
         if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
             perror("Error on SO_BINDTODEVICE");
