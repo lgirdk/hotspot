@@ -834,7 +834,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 		        if(rc != EOK)
 		        {
 			       ERR_CHK(rc);
-			       return;
+			       return NULL;
 		        }
 
                 msg_debug("gpPrimaryEP: %s\n", gpPrimaryEP);
@@ -849,7 +849,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 		        if(rc != EOK)
 		        {
 			       ERR_CHK(rc);
-			       return;
+			       return NULL;
 		        }
 
                 msg_debug("gpSecondaryEP: %s\n", gpSecondaryEP);
@@ -948,7 +948,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 					if (rc != EOK)
 					{
 						ERR_CHK(rc);
-						return;
+						return NULL;
 					}
                     break;
                 }
@@ -963,7 +963,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 					if (rc != EOK)
 					{
 						ERR_CHK(rc);
-						return;
+						return NULL;
 					}
                     gSnoopSSIDListInt[i] = atoi(val);
                     break;
