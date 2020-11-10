@@ -1284,7 +1284,10 @@ void *dhcp_snooper_init(void *data)
 
         // Pass the queue number to the packet handler
         gPriv_data[j] = i;
-
+        //Changing nf queue value for new ssid
+        if ( i == 5 ){
+          i = 45;
+        }
         // Install a callback on each of the iptables NFQUEUE queues
         if (!(myQueue = nfq_create_queue(nfqHandle,  i, &snoop_packetHandler, &gPriv_data[j++]))) {
     

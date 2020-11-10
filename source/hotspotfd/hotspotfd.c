@@ -96,7 +96,7 @@
 
 extern  ANSC_HANDLE             bus_handle;
 static char ssid_reset_mask = 0x0;
-#define SSIDVAL 4
+#define SSIDVAL 5
 
 struct packet {
     struct icmphdr hdr;
@@ -173,7 +173,8 @@ char gSnoopSyseventCircuitIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = {
     kSnooper_circuit_id1,
     kSnooper_circuit_id2,
     kSnooper_circuit_id3,
-    kSnooper_circuit_id4
+    kSnooper_circuit_id4,
+    kSnooper_circuit_id5
 };
 
 char gSnoopSSIDList[kSnoop_MaxCircuitIDs][kSnoop_MaxCircuitLen];
@@ -183,7 +184,8 @@ char gSnoopSyseventSSIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = {
     kSnooper_ssid_index1,
     kSnooper_ssid_index2,
     kSnooper_ssid_index3,
-    kSnooper_ssid_index4
+    kSnooper_ssid_index4,
+    kSnooper_ssid_index5
 };
 
 typedef enum {
@@ -264,18 +266,17 @@ static bool set_validatessid() {
     parameterValStruct_t  *param_val = NULL;
     char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
     char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
-      /* Coverity Fix: CID 104508 bad initializer */
-    const char *paramNames[] = {
-        "Device.WiFi.SSID.5.Enable",
-        "Device.WiFi.SSID.6.Enable",
-        "Device.WiFi.SSID.9.Enable",
-        "Device.WiFi.SSID.10.Enable" };
-  
+    const char ap5[]="Device.WiFi.SSID.5.Enable";
+    const char ap6[]="Device.WiFi.SSID.6.Enable";
+    const char ap9[]="Device.WiFi.SSID.9.Enable";
+    const char ap10[]="Device.WiFi.SSID.10.Enable";
+    const char ap16[]="Device.WiFi.SSID.16.Enable";
+    char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
     char* faultParam      = NULL;
     int   ret             = 0; 
     int i = 0;
   
-    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * 4);
+    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * 5);
     if (NULL == param_val)
     {  
         CcspTraceError(("Memory allocation failed in hotspot \n"));
@@ -305,7 +306,7 @@ static bool set_validatessid() {
             0,
             0,   
             param_val,
-            4,
+            5,
             TRUE,
             &faultParam
             );   
@@ -341,7 +342,8 @@ static bool get_validate_ssid()
     const char ap6[]="Device.WiFi.SSID.6.Enable";
     const char ap9[]="Device.WiFi.SSID.9.Enable";
     const char ap10[]="Device.WiFi.SSID.10.Enable";
-    char *paramNames[]={ap5,ap6,ap9,ap10};
+    const char ap16[]="Device.WiFi.SSID.16.Enable";
+    char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
     int  valNum = 0, i =0; 
     BOOL ret_b=FALSE;
 
@@ -350,7 +352,7 @@ static bool get_validate_ssid()
             dstComponent,
             dstPath,
             paramNames,
-            4,
+            5,
             &valNum,
             &valStructs);
     
@@ -363,7 +365,7 @@ static bool get_validate_ssid()
 
     if(valStructs)
     {
-      CcspTraceInfo(("Retrieving previous ssid info ssid 5 = %s ssid 6 = %s ssid 9 = %s ssid 10 = %s \n",valStructs[0]->parameterValue,valStructs[1]->parameterValue, valStructs[2]->parameterValue,valStructs[3]->parameterValue));
+      CcspTraceInfo(("Retrieving previous ssid info ssid 5 = %s ssid 6 = %s ssid 9 = %s ssid 10 = %s ssid 16 = %s\n",valStructs[0]->parameterValue,valStructs[1]->parameterValue, valStructs[2]->parameterValue,valStructs[3]->parameterValue, valStructs[4]->parameterValue));
     
       for(i = 0; i < SSIDVAL; i++)
       {
@@ -611,6 +613,7 @@ printf("------------------ %s \n", __func__);
 
 #define kbrlan2_inst "3"
 #define kbrlan3_inst "4"
+#define kbrlan11_inst "11"
 #define kmultinet_Sync "multinet-syncMembers"
 
 static void hotspotfd_syncMultinet(void)
@@ -621,6 +624,9 @@ static void hotspotfd_syncMultinet(void)
 
 	if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan3_inst, 0)) {
 		CcspTraceError(("sysevent set %s failed on brlan3\n", kmultinet_Sync));
+        }
+        if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan11_inst, 0)) {
+		CcspTraceError(("sysevent set %s failed on brpublic\n", kmultinet_Sync));
         }
 }
 #endif
