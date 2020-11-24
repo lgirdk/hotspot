@@ -96,8 +96,14 @@
 
 extern  ANSC_HANDLE             bus_handle;
 static char ssid_reset_mask = 0x0;
-#define SSIDVAL 5
 
+#if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
+#define SSIDVAL 5
+#define PARAM_COUNT 5
+#else
+#define PARAM_COUNT 4
+#define SSIDVAL 4
+#endif
 struct packet {
     struct icmphdr hdr;
     char msg[PACKETSIZE-sizeof(struct icmphdr)];
@@ -270,13 +276,17 @@ static bool set_validatessid() {
     const char ap6[]="Device.WiFi.SSID.6.Enable";
     const char ap9[]="Device.WiFi.SSID.9.Enable";
     const char ap10[]="Device.WiFi.SSID.10.Enable";
+#if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
     const char ap16[]="Device.WiFi.SSID.16.Enable";
     char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
+#else
+    char *paramNames[]={ap5,ap6,ap9,ap10};
+#endif
     char* faultParam      = NULL;
     int   ret             = 0; 
     int i = 0;
   
-    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * 5);
+    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * PARAM_COUNT);
     if (NULL == param_val)
     {  
         CcspTraceError(("Memory allocation failed in hotspot \n"));
@@ -306,7 +316,7 @@ static bool set_validatessid() {
             0,
             0,   
             param_val,
-            5,
+            PARAM_COUNT,
             TRUE,
             &faultParam
             );   
@@ -324,7 +334,7 @@ static bool set_validatessid() {
     if(param_val)
     {
         free(param_val);
-        
+        param_val = NULL;
     }
     ssid_reset_mask = 0;
     return TRUE;
@@ -342,8 +352,12 @@ static bool get_validate_ssid()
     const char ap6[]="Device.WiFi.SSID.6.Enable";
     const char ap9[]="Device.WiFi.SSID.9.Enable";
     const char ap10[]="Device.WiFi.SSID.10.Enable";
+#if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
     const char ap16[]="Device.WiFi.SSID.16.Enable";
     char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
+#else
+    char *paramNames[]={ap5,ap6,ap9,ap10};
+#endif
     int  valNum = 0, i =0; 
     BOOL ret_b=FALSE;
 
@@ -352,7 +366,7 @@ static bool get_validate_ssid()
             dstComponent,
             dstPath,
             paramNames,
-            5,
+            PARAM_COUNT,
             &valNum,
             &valStructs);
     
@@ -365,8 +379,11 @@ static bool get_validate_ssid()
 
     if(valStructs)
     {
-      CcspTraceInfo(("Retrieving previous ssid info ssid 5 = %s ssid 6 = %s ssid 9 = %s ssid 10 = %s ssid 16 = %s\n",valStructs[0]->parameterValue,valStructs[1]->parameterValue, valStructs[2]->parameterValue,valStructs[3]->parameterValue, valStructs[4]->parameterValue));
-    
+#if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
+      CcspTraceInfo(("Retrieving previous ssid info ssid 5 = %s ssid 6 = %s ssid 9 = %s ssid 10 = %s ssid 16 = %s\n",valStructs[0]->parameterValue,valStructs[1]->parameterValue, valStructs[2]->parameterValue,valStructs[3]->parameterValue,valStructs[4]->parameterValue));
+#else
+      CcspTraceInfo(("Retrieving previous ssid info ssid 5 = %s ssid 6 = %s ssid 9 = %s ssid 10 = %s\n",valStructs[0]->parameterValue,valStructs[1]->parameterValue, valStructs[2]->parameterValue,valStructs[3]->parameterValue));
+#endif
       for(i = 0; i < SSIDVAL; i++)
       {
            if (0 == strncmp("true", valStructs[i]->parameterValue, 4))
@@ -625,9 +642,11 @@ static void hotspotfd_syncMultinet(void)
 	if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan3_inst, 0)) {
 		CcspTraceError(("sysevent set %s failed on brlan3\n", kmultinet_Sync));
         }
+#if defined (_CBR_PRODUCT_REQ_)
         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan11_inst, 0)) {
 		CcspTraceError(("sysevent set %s failed on brpublic\n", kmultinet_Sync));
         }
+#endif
 }
 #endif
 
