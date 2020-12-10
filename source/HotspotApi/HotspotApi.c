@@ -20,6 +20,8 @@
 #include "libHotspot.h"
 #include "libHotspotApi.h"
 #include "webconfig_framework.h"
+#include "ccsp_psm_helper.h"
+
 /**************************************************************************/
 /*      GLOBAL and STATIC  VARIABLES                                      */
 /**************************************************************************/
@@ -76,23 +78,22 @@ bool tunnel_param_synchronize() {
     char buff[20] = {0};
     char* faultParam      = NULL;
     int   ret             = 0;
-    int i = 0;
 
     CcspTraceInfo(("HOTSPOT_LIB : Entering function %s....\n", __FUNCTION__));
     
-    param_val[0].parameterName = priEndpoint;
+    param_val[0].parameterName = (char *)priEndpoint;
     //strcpy(param_val[0].parameterValue, gPriEndptIP);
     param_val[0].parameterValue = gPriEndptIP;
     param_val[0].type = ccsp_string;
 
-    param_val[1].parameterName = secEndpoint;
+    param_val[1].parameterName = (char *)secEndpoint;
     //strcpy(param_val[1].parameterValue, gSecEndptIP);
     param_val[1].parameterValue = gSecEndptIP;
     param_val[1].type = ccsp_string;
     (true == gXfinityEnable) ?
        strcpy(buff, "true"):
        strcpy(buff,"false");
-    param_val[2].parameterName = xfinityenable;
+    param_val[2].parameterName = (char *)xfinityenable;
     param_val[2].parameterValue = buff;
     param_val[2].type = ccsp_boolean;
     CcspTraceInfo(("HOTSPOT_LIB : sync params...\n"));
@@ -103,7 +104,7 @@ bool tunnel_param_synchronize() {
             dstPath,
             0,
             0x0,
-            &param_val,
+            param_val,
             3,
             TRUE,
             &faultParam
@@ -118,12 +119,11 @@ bool tunnel_param_synchronize() {
 }
 
 
-static int sys_execute_cmd(char *cmd){
+static void sys_execute_cmd(char *cmd){
 
     CcspTraceError(("HOTSPOT_LIB : Entering  %s\n", __FUNCTION__));
-    int rc = -1;
-    rc = system(cmd);
-    return 0;
+    system(cmd);
+    return;
 }
 
 int gre_sysevent_syscfg_init()
@@ -151,7 +151,7 @@ int  update_bridge_config (int index) {
         memset(query,'\0',sizeof(query));
         memset(param, '\0', sizeof (param));
         snprintf(rule, sizeof(rule),"-A FORWARD -o $br -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d", index+1 ); 
-                snprintf(param, sizeof(param), "gre_1_%d_snoop_rule", gVlanSyncData[index].bridgeName);
+                snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
                 sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
                 sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
     } else {
@@ -205,6 +205,7 @@ int create_tunnel(char *gre_primary_endpoint){
          CcspTraceInfo(("HOTSPOT_LIB : ROLLBACK Buffer 1 gre add = %s %d\n", cmdBuf, offset));
          if (offset)
              sys_execute_cmd(cmdBuf);
+	 return 0;
 }
 
 static int deleteVaps(){
@@ -400,13 +401,12 @@ bool get_ssid_enable(int ssidIdx)
     char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
     char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
     const char ap[128]={0};
-    char *paramNames[]={ap};
-    int  valNum = 0, i =0;
+    char *paramNames[]={(char *)ap};
+    int  valNum = 0;
     bool retVal = false;
 
-    snprintf ( ap, sizeof(ap), "Device.WiFi.SSID.%d.Enable", ssidIdx);
+    snprintf ( (char *)ap, sizeof(ap), "Device.WiFi.SSID.%d.Enable", ssidIdx);
  
-    CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
 
     ret = CcspBaseIf_getParameterValues(
             bus_handle,
@@ -450,7 +450,7 @@ PsmGet(const char *param, char *value, int size)
 }
 
 bool prepareFirstRollback(tunneldoc_t *network){
-
+    UNREFERENCED_PARAMETER(network);
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s function....... \n", __FUNCTION__));
     bool ret = false;
     jansson_store_tunnel_info(NULL);
@@ -464,10 +464,8 @@ pErr setHotspot(void* const network){
      tunneldoc_t     *pGreTunnelData = NULL;          
      int    retValue = 0;
      int    index = 0;
-     int    offset = 0;
      int    vlanid = 0;
      char   cmdBuf[1024] = {0};
-     char   Buf[200] = {0};
      FILE   *fptr = NULL;
      bool   status = false;
      char val[16] = {0};
@@ -598,11 +596,12 @@ pErr setHotspot(void* const network){
 }
 
 int deleteHotspot(){
+#if !defined(_COSA_INTEL_XB3_ARM_)
      char   cmdBuf[1024];
      int    offset = 0;
      int    index = 0;
+#endif
      bool   ret = FALSE;
-     tunneldoc_t   *rNetwork = NULL;
      deleteVaps();
      vapBitMask = 0x00;
      CcspTraceInfo(("HOTSPOT_LIB : Entering 'deleteHotspot'\n"));
@@ -639,10 +638,12 @@ int deleteHotspot(){
 }
 
 int confirmVap(){
-    char   cmdBuf[1024] = {0};
     char   Buf[200] = {0};
+#if !defined(_COSA_INTEL_XB3_ARM_)
+    char   cmdBuf[1024] = {0};
     int    offset = 0;
     int    index = 0;
+#endif
     FILE   *fptr = NULL;
  
  
@@ -673,7 +674,7 @@ int confirmVap(){
            CcspTraceError(("HOTSPOT_LIB : hotspot.json file not available in tmp  %s \n", __FUNCTION__));
            memset((char *)execRetVal,0,sizeof(Err));
            execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
-           return execRetVal;
+           return (int)execRetVal;
      }
      if(fptr != NULL) {
       fclose(fptr);
@@ -692,9 +693,11 @@ int confirmVap(){
      firewall_restart();
      tunnel_param_synchronize();
 
+     return 0;
 }
 
 size_t calculateTimeout(size_t numOfEntries){
+    UNREFERENCED_PARAMETER(numOfEntries);
     CcspTraceInfo(("HOTSPOT_LIB : calling calculateTimeout\n"));
     return 30;
 }

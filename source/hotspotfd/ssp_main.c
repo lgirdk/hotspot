@@ -41,6 +41,7 @@
 #include "ccsp_dm_api.h"
 #include "hotspotfd.h"
 #include "safec_lib_common.h"
+#include <telemetry_busmessage_sender.h>
 
 #ifdef INCLUDE_BREAKPAD
 #include "breakpad_wrapper.h"
@@ -120,7 +121,6 @@ static void _print_stack_backtrace(void)
 
 #if defined(_ANSC_LINUX)
 static void daemonize(void) {
-	int fd;
 	switch (fork()) {
 	case 0:
 		break;
@@ -139,7 +139,7 @@ static void daemonize(void) {
 		exit(0);
 	}
 #ifndef  _DEBUG
-
+	int fd;
 	fd = open("/dev/null", O_RDONLY);
 	if (fd != 0) {
 		dup2(fd, 0);

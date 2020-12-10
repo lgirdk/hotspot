@@ -58,12 +58,20 @@
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <pthread.h>
+#include "ansc_platform.h"
 #include "libnetfilter_queue/libnetfilter_queue.h"
 #include "safec_lib_common.h"
 
 /**************************************************
 ******** MACRO DEFINITIONS **************************
 **************************************************/
+#ifdef TRUE
+    #undef TRUE
+#endif
+
+#ifdef FALSE
+    #undef FALSE
+#endif
 
 #define TRUE    0
 #define FALSE   -1
@@ -233,9 +241,10 @@ int main (int argc, char *argv[])
    
     system("touch /tmp/hotspot_arpd_up"); 
     hotspot_arpd_nfqueue_handler((void*)&g_nfqueue);
-    
-cleanup:
+
+//cleanup:
     hotspot_arpd_cleanup();
+
 exit:
     return rc;
 }
@@ -428,7 +437,6 @@ build_gre_arp_reply_packet(
         int *length)
 {
     struct iphdr *pIphdr;
-    struct ethhdr *pEthhdr;
     arp_pkt_t *pArp;
     unsigned char sender_mac[6];
     unsigned char sender_ip[4], target_ip[4];
@@ -547,10 +555,12 @@ hotspot_arpd_nfqueue_cb(
     struct nfq_data *nfa, 
     void *data)
 {
+    UNREFERENCED_PARAMETER(nfmsg);
+    UNREFERENCED_PARAMETER(data);
     unsigned char *payload;
     struct nfqnl_msg_packet_hdr *ph;
     struct nfqnl_msg_packet_hw *hwph;
-    int ret, id = 0, i, j = 0, rc;
+    int ret, id = 0, i, j = 0;
 
     ph = nfq_get_msg_packet_hdr(nfa);
     if(ph) {

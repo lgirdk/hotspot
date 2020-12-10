@@ -262,6 +262,7 @@ ssp_CcdIfGetComponentName
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->Name;
 }
 
@@ -272,6 +273,7 @@ ssp_CcdIfGetComponentVersion
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->Version;
 }
 
@@ -282,6 +284,7 @@ ssp_CcdIfGetComponentAuthor
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->Author;
 }
 
@@ -292,6 +295,7 @@ ssp_CcdIfGetComponentHealth
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->Health;
 }
 
@@ -302,6 +306,7 @@ ssp_CcdIfGetComponentState
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->State;
 }
 
@@ -313,6 +318,7 @@ ssp_CcdIfGetLoggingEnabled
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->LogEnable;
 }
 
@@ -324,6 +330,7 @@ ssp_CcdIfSetLoggingEnabled
         BOOL                            bEnabled
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);    
     if( g_pComponent_COMMON_hotspot->LogEnable == bEnabled) return ANSC_STATUS_SUCCESS;
      g_pComponent_COMMON_hotspot->LogEnable = bEnabled;
     if(bEnabled) g_iTraceLevel = (INT)  g_pComponent_COMMON_hotspot->LogLevel;
@@ -339,6 +346,7 @@ ssp_CcdIfGetLoggingLevel
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->LogLevel;
 }
 
@@ -350,6 +358,7 @@ ssp_CcdIfSetLoggingLevel
         ULONG                           LogLevel
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     if( g_pComponent_COMMON_hotspot->LogLevel == LogLevel) return ANSC_STATUS_SUCCESS;
      g_pComponent_COMMON_hotspot->LogLevel = LogLevel;
     if( g_pComponent_COMMON_hotspot->LogEnable) g_iTraceLevel = (INT)  g_pComponent_COMMON_hotspot->LogLevel;
@@ -364,6 +373,7 @@ ssp_CcdIfGetMemMaxUsage
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return g_ulAllocatedSizePeak;
 }
 
@@ -374,6 +384,7 @@ ssp_CcdIfGetMemMinUsage
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     return  g_pComponent_COMMON_hotspot->MemMinUsage;
 }
 
@@ -385,7 +396,7 @@ ssp_CcdIfGetMemConsumed
     )
 {
     LONG             size = 0;
-
+    UNREFERENCED_PARAMETER(hThisObject);
     size = AnscGetComponentMemorySize(CCSP_COMPONENT_NAME_HOTSPOT);
     if (size == -1 )
         size = 0;
@@ -400,6 +411,7 @@ ssp_CcdIfApplyChanges
         ANSC_HANDLE                     hThisObject
     )
 {
+    UNREFERENCED_PARAMETER(hThisObject);
     ANSC_STATUS                         returnStatus    = ANSC_STATUS_SUCCESS;
     /* Assume the parameter settings are committed immediately. */
     /* AnscSetTraceLevel((INT) g_pComponent_COMMON_hotspot->LogLevel); */

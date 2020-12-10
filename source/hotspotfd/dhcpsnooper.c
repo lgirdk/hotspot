@@ -52,9 +52,10 @@
 #include "debug.h"
 #include "dhcp.h"
 #include "ccsp_trace.h"
-
+#include "ansc_platform.h"
 #include <telemetry_busmessage_sender.h>
 #include "safec_lib_common.h"
+
 
 #define mylist_safe(p, q, h) \
          if ((h)->n == NULL ) { \
@@ -200,11 +201,10 @@ static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned lengt
     int circuit_id_len;
     int remote_id_len;
     unsigned option_length = 0;  /*RDKB-7435, CID-33355, init before use */
-    char addr_str[INET_ADDRSTRLEN] = {0};
     char host_str[kSnooper_MaxHostNameLen] = {0};
     u_int8_t * option,*next_option;
 	errno_t rc = -1;
-	int ind = -1;
+
 	/* If we're not adding agent options to packets, we can skip
 	   this. */
 	if (!add_agent_options)
@@ -813,10 +813,12 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
 
 static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number)
 {
-    int  is_dhcp=0,mms,l_iSkipBytes = 0,count = 0;
+    UNREFERENCED_PARAMETER(queue_number);
+    int  mms,count = 0;
+    //int  is_dhcp=0;
+
     u_int8_t *op = NULL, *nextop = NULL, *sp = NULL, *max = NULL, *end_pad = NULL;
 
-    int circuit_id_len; 
     max = ((u_int8_t *)packet) + gSnoopDhcpMaxAgentOptionLen;
 
     /* Commence processing after the cookie. */
@@ -856,7 +858,7 @@ static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned le
 
             /* If we see a message type, it's a DHCP packet. */
         case DHO_DHCP_MESSAGE_TYPE:
-            is_dhcp = 1;
+            //is_dhcp = 1;
             goto skip;
             /*
              * If there's a maximum message size option, we
@@ -937,6 +939,7 @@ static bool snoop_isValidIpAddress(char *ipAddress)
 
 static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *msg,struct nfq_data *pkt, void *cbData) 
 {
+    UNREFERENCED_PARAMETER(msg);
     uint32_t queue_id = -1; /*RDKB-7435, CID-33527, init before use */
     int queue_number = *(int *)cbData;
     //uint16_t checksum;
@@ -1256,6 +1259,7 @@ void updateRssiForClient(char* pRemote_id, int rssi)
 
 void *dhcp_snooper_init(void *data)
 {
+    UNREFERENCED_PARAMETER(data);
     /* Coverity Fix CID:71609 UnInit var*/
     struct nfq_handle *nfqHandle = NULL;
     struct nfq_q_handle *myQueue = NULL;
@@ -1319,13 +1323,13 @@ void *dhcp_snooper_init(void *data)
 	if(rc != EOK)
 	{
 		ERR_CHK(rc);
-		return;
+		return NULL;
 	}
 	rc = strcpy_s(gRemote_id, sizeof(gRemote_id), kSnoop_DefaultRemoteID);
 	if(rc != EOK)
 	{
 		ERR_CHK(rc);
-		return;
+		return NULL;
 	}
 
 	CcspTraceInfo(("dhcp_snooper thread inited\n"));

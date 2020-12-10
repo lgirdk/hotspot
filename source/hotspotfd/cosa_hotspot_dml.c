@@ -75,9 +75,10 @@
 
 BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* ParamName, char* strValue)
 {
-	int l_iAddOrDelete, l_iSsidIndex, l_iRssi; 
+    UNREFERENCED_PARAMETER(hInsContext);
+    int l_iAddOrDelete, l_iSsidIndex, l_iRssi; 
     char l_cMacAddr[20];
-	errno_t rc = -1;
+    errno_t rc = -1;
     int ind = -1;
     char *ret = NULL;
 
@@ -125,14 +126,17 @@ HotspotConnectedDevice_GetParamStringValue
         ULONG*                      pUlSize
     )
 {
-	errno_t rc = -1;
-	int ind = -1;
+    UNREFERENCED_PARAMETER(hInsContext);
+    UNREFERENCED_PARAMETER(pValue);
+    UNREFERENCED_PARAMETER(pUlSize);
+    errno_t rc = -1;
+    int ind = -1;
     /* check the parameter name and return the corresponding value */
-	rc = strcmp_s("ClientChange", strlen("ClientChange"),ParamName, &ind);
+    rc = strcmp_s("ClientChange", strlen("ClientChange"),ParamName, &ind);
     ERR_CHK(rc);
     if ((ind == 0) && (rc == EOK))
     {
         return 0;
     }
-	return 1;
+    return 1;
 }

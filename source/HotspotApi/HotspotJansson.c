@@ -30,11 +30,12 @@ extern char     gPriEndptIP[32];
 extern char     gSecEndptIP[32];
 /**************************************************************************/
 
+int PsmGet(const char *param, char *value, int size);
 
-static rollback_vapBridge(char const *vap_name, int wan_vlan){
+static void rollback_vapBridge(char const *vap_name, int wan_vlan){
    CcspTraceInfo(("HOTSPOT_LIB : Entering %s...\n", __FUNCTION__));
-   configHotspotBridgeVlan(vap_name,  wan_vlan);
-   update_bridge_config(getHotspotVapIndex(vap_name));
+   configHotspotBridgeVlan((char *)vap_name,  wan_vlan);
+   update_bridge_config(getHotspotVapIndex((char *)vap_name));
 }
 
 
@@ -82,7 +83,8 @@ bool jansson_rollback_tunnel_info() {
     if (jdscp && json_is_integer(jdscp)){
    
         dscp = json_integer_value(jdscp);
-    }   
+    }
+    CcspTraceInfo(("HOTSPOT_LIB : file load hotspot json dscp...%d\n", dscp));
     //CcspTraceInfo(("HOTSPOT_LIB : file load hotspot json dscp...%d\n", rNetwork->entries->gre_dscp));
     
     json_t *jgre_enable = json_object_get(json_tun_root, "gre_enable");
@@ -101,9 +103,9 @@ bool jansson_rollback_tunnel_info() {
     json_t *json_wan_vlan = json_object_get(json_tun, "wan_vlan");
     json_t *json_vap_enable = json_object_get(json_tun, "enable");
 
-    json_t *jsonVapName;
-    json_t *jsonVapenable;
-    json_t *jsonVapID;
+    json_t *jsonVapName = NULL;
+    json_t *jsonVapenable = NULL;
+    json_t *jsonVapID = NULL;
   
     if(json_is_array(json_vap_name) && json_is_array(json_wan_vlan) && json_is_array(json_vap_enable)){
         CcspTraceInfo(("HOTSPOT_LIB : file load EP in array json \n"));
@@ -119,7 +121,7 @@ bool jansson_rollback_tunnel_info() {
                   rollback_vapBridge(name, json_integer_value(jsonVapID));
              }
          }
-         hotspot_sysevent_enable_param(priEndIp, secEndIp);
+         hotspot_sysevent_enable_param();
          firewall_restart();
      }
      json_decref(jsonVapID);
@@ -143,7 +145,6 @@ bool jansson_rollback_tunnel_info() {
 int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
   
     char* s = NULL;
-    bool val = TRUE;
     int i = 0, count = 0;
     char psm_val[128] = {0};
     char vlan_val[128] = {0};

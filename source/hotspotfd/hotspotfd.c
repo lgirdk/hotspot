@@ -279,9 +279,9 @@ static bool set_validatessid() {
     const char ap10[]="Device.WiFi.SSID.10.Enable";
 #if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
     const char ap16[]="Device.WiFi.SSID.16.Enable";
-    char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
+    const char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
 #else
-    char *paramNames[]={ap5,ap6,ap9,ap10};
+    const char *paramNames[]={ap5,ap6,ap9,ap10};
 #endif
     char* faultParam      = NULL;
     int   ret             = 0; 
@@ -296,7 +296,7 @@ static bool set_validatessid() {
   
     for (i = 0; i < SSIDVAL; i++)
     {
-       param_val[i].parameterName = paramNames[i];
+       param_val[i].parameterName = (char*)paramNames[i];
        if(ssid_reset_mask & (1<<i))
        {   
            param_val[i].parameterValue=AnscCloneString("true");
@@ -355,9 +355,9 @@ static bool get_validate_ssid()
     const char ap10[]="Device.WiFi.SSID.10.Enable";
 #if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
     const char ap16[]="Device.WiFi.SSID.16.Enable";
-    char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
+    const char *paramNames[]={ap5,ap6,ap9,ap10,ap16};
 #else
-    char *paramNames[]={ap5,ap6,ap9,ap10};
+    const char *paramNames[]={ap5,ap6,ap9,ap10};
 #endif
     int  valNum = 0, i =0; 
     BOOL ret_b=FALSE;
@@ -366,7 +366,7 @@ static bool get_validate_ssid()
             bus_handle,
             dstComponent,
             dstPath,
-            paramNames,
+            (char**)paramNames,
             PARAM_COUNT,
             &valNum,
             &valStructs);
@@ -623,11 +623,13 @@ printf("------------------ %s \n", __func__);
 #if !defined(_COSA_BCM_MIPS_)
     if(checkClient && !hotspotfd_isClientAttached( NULL) )
         return  STATUS_SUCCESS;
+#else
+    UNREFERENCED_PARAMETER(checkClient);
 #endif
     return  _hotspotfd_ping(address);
 }
 
-#if defined(_COSA_BCM_ARM_) 
+#if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_)) 
 
 #define kbrlan2_inst "3"
 #define kbrlan3_inst "4"
@@ -797,6 +799,7 @@ static bool hotspotfd_isValidIpAddress(char *ipAddress)
 #ifdef __HAVE_SYSEVENT__
 static void *hotspotfd_sysevent_handler(void *data)
 {
+    UNREFERENCED_PARAMETER(data);
     async_id_t hotspotfd_primary_id;
     async_id_t hotspotfd_secondary_id; 
     async_id_t hotspotfd_keep_alive_id;
@@ -867,7 +870,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 		        if(rc != EOK)
 		        {
 			       ERR_CHK(rc);
-			       return;
+			       return NULL;
 		        }
 
                 msg_debug("gpPrimaryEP: %s\n", gpPrimaryEP);
@@ -882,7 +885,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 		        if(rc != EOK)
 		        {
 			       ERR_CHK(rc);
-			       return;
+			       return NULL;
 		        }
 
                 msg_debug("gpSecondaryEP: %s\n", gpSecondaryEP);
@@ -981,7 +984,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 					if (rc != EOK)
 					{
 						ERR_CHK(rc);
-						return;
+						return NULL;
 					}
                     break;
                 }
@@ -996,7 +999,7 @@ static void *hotspotfd_sysevent_handler(void *data)
 					if (rc != EOK)
 					{
 						ERR_CHK(rc);
-						return;
+						return NULL;
 					}
                     gSnoopSSIDListInt[i] = atoi(val);
                     break;
@@ -1272,7 +1275,7 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         gKeepAlivePolicy = atoi(buf);
-        if (gKeepAlivePolicy >= 0) {
+        if ((int)gKeepAlivePolicy >= 0) {
             msg_debug("Loaded sysevent %s with %d\n", khotspotfd_keep_alive_policy, gKeepAlivePolicy); 
 
         } else {
@@ -1411,7 +1414,7 @@ void hotspot_start()
     unsigned int secondaryKeepAlives = 0;
 	time_t secondaryEndPointstartTime;
 	time_t currentTime ;
-	int timeElapsed;
+	unsigned int timeElapsed;
 	errno_t rc = -1;
         int   ret   = 0; 
 
