@@ -73,6 +73,7 @@
 #define kSnooper_enable                     "snooper-enable"
 #define kSnooper_circuit_enable             "snooper-circuit-enable"
 #define kSnooper_remote_enable              "snooper-remote-enable"
+#define kSnooper_option60_enable            "snooper-option60-enable"
 #define kSnooper_debug_enable               "snooper-debug-enable"
 #define kSnooper_log_enable                 "snooper-log-enable"
 #define kSnooper_max_clients                "snooper-max-clients"
@@ -213,4 +214,6 @@ typedef struct
 void *dhcp_snooper_init(void *); 
 void updateRssiForClient(char* pRemote_id, int rssi);
 void snoop_RemoveClientListEntry(char *pRemote_id);
+#define MAX_OPTION_SIZE 312
+
 #endif
