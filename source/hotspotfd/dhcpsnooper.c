@@ -56,6 +56,7 @@
 #include "safec_lib_common.h"
 #include "libHotspot.h"
 
+#define MAX_OPTION_SIZE 312
 
 #define mylist_safe(p, q, h) \
          if ((h)->n == NULL ) { \
@@ -107,6 +108,7 @@ extern bool gSnoopDebugEnabled;
 extern bool gSnoopLogEnabled;
 extern bool gSnoopCircuitEnabled;
 extern bool gSnoopRemoteEnabled;
+extern bool gSnoopSSIDOption60Enable;
 static int gSnoopDhcpMaxAgentOptionLen = DHCP_MTU_MIN;
 static int gSnoopNumCapturedPackets = 0;
 extern int gSnoopFirstQueueNumber;
@@ -155,6 +157,111 @@ static enum agent_relay_mode_t snoop_getDhcpRelayAgentMode( )
 	return agent_relay_mode;
 }
 #endif
+
+#define BACK_UP_BUFF_LEN 64
+#define DHCP_MAX_AGENT_OPTION_PACKET_LENGTH DHCP_MTU_MAX
+static int snoop_modifyOption60(struct dhcp_packet *packet, unsigned length, char *SSID_str) 
+{
+    u_int8_t *ptr, *max_len = NULL;
+
+    int SSID_len = 0;
+    unsigned char *pt_opt60 = NULL, *max = NULL, *pt_end = NULL, *pt_start = NULL, *pt_dbg = NULL;
+    unsigned short op60_ori_len = 0;
+
+    char remain_opt_data[MAX_OPTION_SIZE];
+    char opt60_new_val[BACK_UP_BUFF_LEN+32];
+    int i;
+
+    if (SSID_str)
+        SSID_len = strlen(SSID_str);
+
+    if (SSID_len == 0)
+    {
+        msg_debug("[DHCP_SNOOPER] Error, empty ssid\n");
+        return length;
+    }
+
+    if (memcmp(packet->options, DHCP_OPTIONS_COOKIE, 4) == 0)
+    {
+        max_len = ((u_int8_t *)packet) + DHCP_MAX_AGENT_OPTION_PACKET_LENGTH;
+        pt_start = pt_end = &packet->options[4];
+        /*Find the original DHCP end 0xFF position*/
+        while( *pt_end != DHO_END ) {
+            pt_end = pt_end + *(pt_end+1) + 2;
+        }
+        msg_debug("[DHCP_SNOOPER]end point:%02X \n\n", *pt_end);
+        while (*pt_start != DHO_END)
+        {
+            /*Find the option 60*/
+            if (*pt_start == DHO_VENDOR_CLASS_IDENTIFIER)
+            {
+                op60_ori_len = *(pt_start+1);
+
+                /* Enough Space Check*/
+                if((max_len - pt_end) < SSID_len)
+                {
+                    msg_debug("[DHCP_SNOOPER]LINE:%d|No additional pt_startace.\n",__LINE__);
+                    return length;
+                }
+
+                memset(remain_opt_data, 0x00, MAX_OPTION_SIZE);
+                memset(opt60_new_val, 0x00, sizeof(opt60_new_val));
+                pt_dbg = pt_start;
+                pt_opt60 = pt_start;
+ 
+                /*point to address of next option to backup the remain data*/
+                pt_start = pt_start + 2 + op60_ori_len;
+                memcpy(remain_opt_data, pt_start, MAX_OPTION_SIZE);
+ 
+                /*Print the Backup remain data after opt60*/
+                msg_debug("[DHCP_SNOOPER][%d]remain_opt_data=%s\n", __LINE__, remain_opt_data);
+                for( i = 0; i < MAX_OPTION_SIZE; i++)
+                {
+                    msg_debug("%02X ", remain_opt_data[i]);
+                    if(remain_opt_data[i] == 0xff)
+                    {
+                        remain_opt_data[i+1] = '\0';
+                        break;
+                    }
+                }
+                msg_debug("--> len = %d\n", i);
+ 
+                /* Modify the option 60 length */
+                pt_opt60++;
+                *pt_opt60 = SSID_len;
+ 
+                /* Modify the option 60 value SSID */
+                snprintf(opt60_new_val,sizeof(opt60_new_val), "%s",SSID_str);
+                pt_opt60++;
+                memcpy(pt_opt60, opt60_new_val, sizeof(opt60_new_val));
+ 
+                /*All Data Combined, SSID + opt60 original val + remain data after opt60*/
+                pt_opt60 = pt_opt60 + strlen(opt60_new_val);
+                memcpy(pt_opt60, remain_opt_data,sizeof(remain_opt_data));
+ 
+                msg_debug("[DHCP_SNOOPER][%d]pt_opt60:\n", __LINE__);
+                while (*pt_dbg!= 0xff) {
+                    msg_debug("%02X ", *pt_dbg);
+                    pt_dbg++;
+                }
+                msg_debug("\n");
+ 
+                break;
+            }
+            pt_start += (2 + *(pt_start+1)); /*2 = type + length field*/
+        }
+
+        if(0 == op60_ori_len)
+        {
+            /*there is not option 60 in dhcp packet*/
+            msg_debug("[DHCP_SNOOPER][%d]can't find DHO_VENDOR_CLASS_IDENTIFIER\n", __LINE__);
+            return length;
+        }
+        return (SSID_len);
+    }
+
+    return length;
+}
 
 static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int queue_number)
 {
@@ -553,6 +660,7 @@ void snoop_log(void)
 
     fprintf(logOut, "gSnoopCircuitEnabled: %d\n", gSnoopCircuitEnabled);
     fprintf(logOut, "gSnoopRemoteEnabled: %d\n", gSnoopRemoteEnabled);
+    fprintf(logOut, "gSnoopSSIDOption60Enable: %d\n", gSnoopSSIDOption60Enable);
 
     fprintf(logOut, "gSnoopFirstQueueNumber: %d\n", gSnoopFirstQueueNumber);
     fprintf(logOut, "gSnoopNumberOfQueues: %d\n", gSnoopNumberOfQueues);
@@ -968,6 +1076,10 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     struct iphdr *iph = NULL;
     /* Coverity Fix CID: 74885 UnInit var */
     char ipv4_addr[INET_ADDRSTRLEN] = {0};
+    char CircuitID[kSnoop_MaxCircuitLen]={0};
+    char ssidname[32];
+    char *pch = NULL, *pssidname = NULL;
+    char *delim = ";";
 
     // The iptables queue number is passed when this handler is registered
     // with nfq_create_queue
@@ -1032,7 +1144,7 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     // If gSnoopEnable is not set then just send the packet out
     if (((pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Request) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Discover) ||
          (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Decline) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Release) || (pktData[kSnoop_DHCP_Option53_Offset] == kSnoop_DHCP_Inform))
-        && gSnoopEnable && (gSnoopCircuitEnabled || gSnoopRemoteEnabled)) {
+        && gSnoopEnable && (gSnoopCircuitEnabled || gSnoopRemoteEnabled || gSnoopSSIDOption60Enable)) {
                                                            
         rc = strcpy_s(gCircuit_id, sizeof(gCircuit_id), gSnoopCircuitIDList[queue_number]);
 		if(rc != EOK)
@@ -1040,11 +1152,22 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 			ERR_CHK(rc);
 			return -1;
 		}
+
+        snprintf(CircuitID, sizeof(gCircuit_id), "%s", gCircuit_id);
+         
         msg_debug("gCircuit_id: %s\n", gCircuit_id);
 
         sprintf(gRemote_id, "%02x:%02x:%02x:%02x:%02x:%02x", 
                 pktData[56], pktData[57], pktData[58], pktData[59], pktData[60], pktData[61]); 
         msg_debug("gRemote_id: %s\n", gRemote_id);
+
+        if (gSnoopSSIDOption60Enable) {
+            pch = strtok(CircuitID,delim);
+            if (pch != NULL)
+                pssidname = strtok (NULL, delim);
+            strncpy(ssidname, pssidname, sizeof(ssidname));
+            len = snoop_modifyOption60((struct dhcp_packet *)&pktData[kSnoop_DHCP_Options_Start], len, ssidname);
+        }
 
         new_data_len = snoop_addRelayAgentOptions((struct dhcp_packet *)&pktData[kSnoop_DHCP_Options_Start], len, queue_number);
 
