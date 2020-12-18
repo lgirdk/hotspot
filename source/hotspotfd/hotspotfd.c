@@ -184,6 +184,7 @@ bool gSnoopEnable = true;
 bool gSnoopDebugEnabled = false;
 bool gSnoopLogEnabled = true;
 bool gSnoopCircuitEnabled = true;
+bool gSnoopSSIDOption60Enable = true;
 bool gSnoopRemoteEnabled = true;
 int gSnoopFirstQueueNumber = kSnoop_DefaultQueue;
 int gSnoopNumberOfQueues = kSnoop_DefaultNumberOfQueues;
@@ -229,6 +230,7 @@ typedef enum {
     SNOOPER_CIRCUITENABLE,
     SNOOPER_REMOTEENABLE,
     SNOOPER_MAXCLIENTS,
+    SNOOPER_SSID_OPTION60_ENABLE,
 #ifdef WAN_FAILOVER_SUPPORTED
     CURRENT_WAN_IFNAME,
     TEST_CURRENT_WAN_IFNAME,
@@ -258,9 +260,9 @@ Hotspotfd_MsgItem hotspotfdMsgArr[] = {
     {"snooper-log-enable",                            SNOOPER_LOGENABLE},
     {"snooper-circuit-enable",                        SNOOPER_CIRCUITENABLE},
     {"snooper-remote-enable",                         SNOOPER_REMOTEENABLE},
-    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS}
+    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS},
+    {"snooper-option60-enable",                       SNOOPER_SSID_OPTION60_ENABLE},
 #ifdef WAN_FAILOVER_SUPPORTED
-    ,
     {"current_wan_ifname",                            CURRENT_WAN_IFNAME},
     {"test_current_wan_ifname",                       TEST_CURRENT_WAN_IFNAME}
 #endif
@@ -996,6 +998,7 @@ static void *hotspotfd_sysevent_handler(void *data)
     async_id_t snoop_max_clients_id;
     async_id_t snoop_circuit_ids[kSnoop_MaxCircuitIDs]; 
     async_id_t snoop_ssids_ids[kSnoop_MaxCircuitIDs];
+    async_id_t snoop_ssids_option60;
 #ifdef WAN_FAILOVER_SUPPORTED
     async_id_t current_wan_interface_id;
     async_id_t test_current_wan_interface_id;
@@ -1018,6 +1021,7 @@ static void *hotspotfd_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_log_enable,      &snoop_log_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_circuit_enable,  &snoop_circuit_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_remote_enable,   &snoop_remote_enable_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_option60_enable, &snoop_ssids_option60);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_max_clients,     &snoop_max_clients_id);
 #ifdef WAN_FAILOVER_SUPPORTED
     sysevent_setnotification(sysevent_fd, sysevent_token, kcurrent_wan_interface,      &current_wan_interface_id);
@@ -1154,6 +1158,10 @@ static void *hotspotfd_sysevent_handler(void *data)
 
                 CcspTraceInfo(("gSnoopMaxNumberOfClients: %u\n", gSnoopMaxNumberOfClients));
 
+            } else if (ret_value == SNOOPER_SSID_OPTION60_ENABLE) {
+                gSnoopSSIDOption60Enable = atoi(val);
+
+                CcspTraceInfo(("gSnoopSSIDOption60Enable %u\n",gSnoopSSIDOption60Enable));
             }
 #ifdef WAN_FAILOVER_SUPPORTED
             else if (ret_value == CURRENT_WAN_IFNAME || ret_value == TEST_CURRENT_WAN_IFNAME) {
@@ -1596,6 +1604,22 @@ static int hotspotfd_getStartupParameters(void)
         	    CcspTraceInfo(("Loaded sysevent %s with %d\n", kSnooper_remote_enable, gSnoopRemoteEnabled));  
 	        }
     	}
+
+        if(status == STATUS_SUCCESS)
+        {
+            if((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, kSnooper_option60_enable,
+                                      buf, kSnoop_max_sysevent_len)))
+            {
+                CcspTraceError(("sysevent_get failed to get %s: %d\n", kSnooper_option60_enable, status));
+                status = STATUS_FAILURE;
+            }
+            else
+            {
+                gSnoopSSIDOption60Enable = atoi(buf);
+                msg_debug("Loaded sysevent %s with %d\n", kSnooper_option60_enable, gSnoopSSIDOption60Enable);
+                CcspTraceInfo(("Loaded sysevent %s with %d\n", kSnooper_option60_enable, gSnoopSSIDOption60Enable));
+            }
+        }
 
 	    if(status == STATUS_SUCCESS) 
 		{
