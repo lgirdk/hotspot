@@ -56,7 +56,9 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <linux/if.h>
-#include <netinet/icmp6.h>
+#include <netinet/ip6.h>      // struct ip6_hdr
+#include <netinet/icmp6.h>    // struct icmp6_hdr and ICMP6_ECHO_REQUEST
+
 #include "ssp_global.h"
 #include "ansc_platform.h"
 #include "libHotspot.h"
@@ -227,6 +229,12 @@ char gSnoopSyseventSSIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = {
     kSnooper_ssid_index5,
     ksnooper_ssid_index6
 };
+
+typedef enum {
+    Nonetype = 0,
+    IPV4type,
+    IPV6type
+}IPType;
 
 typedef enum {
     HOTSPOTFD_PRIMARY,
@@ -648,6 +656,35 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
     return false;
 }
 
+static int validateIpType (char *ipAddr)
+{
+    struct addrinfo hint, *res = NULL;
+    int ret;
+    int typeAdd = Nonetype;
+
+    memset(&hint, '\0', sizeof(hint));
+
+    hint.ai_family = PF_UNSPEC;
+    hint.ai_flags = AI_NUMERICHOST;
+
+    ret = getaddrinfo(ipAddr, NULL, &hint, &res);
+    if (ret) {
+        return Nonetype;
+    }
+    if(res->ai_family == AF_INET) {
+        typeAdd = IPV4type;
+    } else if (res->ai_family == AF_INET6) {
+        typeAdd = IPV6type;
+    } else {
+        typeAdd = Nonetype;
+    }
+
+    if(res)
+        freeaddrinfo(res);
+
+    return typeAdd;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief hotspotfd_checksum
 ///
@@ -874,17 +911,164 @@ printf("------- ping >>\n");
     return status;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+/// \brief hotspotfd_ping_v6
+///
+///  Create message and send it to IPv6
+///
+/// \param - address to ping
+///
+/// \return - 0 = ping successful, 1 = ping not OK
+///
+////////////////////////////////////////////////////////////////////////////////
+static int _hotspotfd_ping_v6(char *ipv6address)
+{
+    const int val = 255;
+    int i, sd,bytes;
+    struct packet pckt;
+    struct addrinfo hints, *res;
+    struct sockaddr_in6 r_addr;
+    int loop;
+    struct sockaddr_in6 *addr_ping;
+    int pid = -1;
+    int cnt = 1;
+    int status = STATUS_FAILURE;
+    int status_res;
+    struct ifreq ifr;
+    unsigned netaddr;
+    static int l_iPingCount = 0;
+    // This is the number of ping's to send out
+    // per keep alive interval
+    unsigned keepAliveCount = gKeepAliveCount;
+    pid = getpid();
+    bzero(&addr_ping, sizeof(addr_ping));
+
+  // Fill out hints for getaddrinfo().
+    memset (&hints, 0, sizeof (hints));
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = hints.ai_flags | AI_CANONNAME;
+    // Resolve target using getaddrinfo().
+    if ((status_res = getaddrinfo (ipv6address, NULL, &hints, &res)) != 0) {
+      CcspTraceError(("Failed to resolve the IPv6 address information"));
+      exit (EXIT_FAILURE);
+    }
+
+    if(res)
+        addr_ping = (struct sockaddr_in6 *) res->ai_addr;
+
+    //ICMPV6 protocol : 58
+    sd = socket(PF_INET6, SOCK_RAW, 58);
+    msg_debug("%s sd=%d\n", __func__, sd);
+    do {
+        if ( sd < 0 )
+        {
+            perror("socket");
+            status = STATUS_FAILURE;
+            break;
+        }
+        // Bind to a specific interface only
+        memset(&ifr, 0, sizeof(ifr));
+        snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s",gKeepAliveInterface);
+        if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0)
+        {
+            perror("Error on SO_BINDTODEVICE in Hotspot");
+            status = STATUS_FAILURE;
+            break;
+        }
+        //Set ttl
+        if(setsockopt(sd, IPPROTO_IPV6, IPV6_UNICAST_HOPS, (char *)&val, sizeof(val)) != 0 ){
+            perror("Set TTL option in Hotspot");
+            status = STATUS_FAILURE;
+            break;
+        }
+
+        if ( fcntl(sd, F_SETFL, O_NONBLOCK) != 0 )
+        {
+            perror("Request nonblocking I/O in Hotspot");
+            status = STATUS_FAILURE;
+            break;
+        }
+
+        if (l_iPingCount == gKeepAliveCount)
+        {
+            l_iPingCount = 0;
+        }
+        else
+            l_iPingCount++;
+
+        for (loop = 0;loop < 10; loop++)
+        {
+            socklen_t len = sizeof(r_addr);
+
+            if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) > 0 )
+            {
+                msg_debug("pckt.hdr.checksum: %d\n", pckt.hdr.checksum);
+                msg_debug("pckt.hdr.code    : %d\n", pckt.hdr.code);
+                msg_debug("pckt.hdr.type    : %d\n", pckt.hdr.type);
+
+                if ((pckt.hdr.type == ICMP6_ECHO_REPLY) && (pckt.hdr.code == 0))
+                {
+                     if (memcmp(pckt.msg, "Hotspot6", 9) == 0)
+                     {
+                         status = STATUS_SUCCESS;
+                         break;
+                     }
+                     else
+                     {
+                         status = STATUS_FAILURE;
+                     }
+                }
+            }
+            bzero(&pckt, sizeof(pckt));
+            pckt.hdr.type = ICMP6_ECHO_REQUEST;
+            pckt.hdr.code = 0;
+            pckt.hdr.un.echo.id = pid;
+            pckt.hdr.un.echo.sequence = cnt++;
+            memcpy(pckt.msg, "Hotspot6", 9);
+            pckt.hdr.checksum = hotspotfd_checksum(&pckt, sizeof(pckt));
+            bytes = sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr_ping, sizeof(*addr_ping)) ;
+            if (bytes <=0)
+            {
+                msg_debug("error send to %d \n",errno);
+            }
+
+            usleep(300000);
+
+        }
+
+    } while (--keepAliveCount);
+
+    if (res)
+        freeaddrinfo (res);
+
+    if ( sd >= 0 ) {
+        close(sd);
+    }
+      msg_debug("------- ping  << status %d\n",status);
+    return status;
+}
+
 static int hotspotfd_ping(char *address, bool checkClient) {
     //zqiu: do not ping WAG if no client attached, and no new client join in
 printf("------------------ %s \n", __func__); 
+    int ret;
 #if !defined(_COSA_BCM_MIPS_)
     if((prevPingStatus == STATUS_SUCCESS) && checkClient && !hotspotfd_isClientAttached(NULL))
         return  STATUS_SUCCESS;
 #else
     UNREFERENCED_PARAMETER(checkClient);
 #endif
-    prevPingStatus =  _hotspotfd_ping(address);
-    return  prevPingStatus;
+
+    ret = validateIpType(address);
+    if (ret == IPV4type)
+        prevPingStatus = _hotspotfd_ping(address);
+    else if (ret == IPV6type)
+        prevPingStatus = _hotspotfd_ping_v6(address);
+    else
+        prevPingStatus = STATUS_FAILURE;
+
+    return prevPingStatus;
 }
 
 #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_)) 
@@ -1589,7 +1773,7 @@ static int hotspotfd_setupSharedMemory(void)
 static int hotspotfd_getStartupParameters(void)
 {
     int status = STATUS_SUCCESS;
-	int i;
+	int i, ret;
     char buf[kMax_IPAddressLength];
 	errno_t rc = -1;
 
@@ -1601,7 +1785,8 @@ static int hotspotfd_getStartupParameters(void)
             break;
         }
 
-        if (hotspotfd_isValidIpAddress(buf)) {
+        ret = validateIpType(buf);
+        if ((ret == IPV4type) || (ret == IPV6type)) {
 			rc = strcpy_s(gpPrimaryEP, sizeof(gpPrimaryEP), buf); 
 			if (rc != EOK)
 			{
@@ -1624,7 +1809,8 @@ static int hotspotfd_getStartupParameters(void)
             break;
         }
 
-        if (hotspotfd_isValidIpAddress(buf)) {
+        ret = validateIpType(buf);
+        if (IPV4type == ret || IPV6type == ret) {
 			rc = strcpy_s(gpSecondaryEP, sizeof(gpSecondaryEP), buf); 
 			if (rc != EOK)
 			{
