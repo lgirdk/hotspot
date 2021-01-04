@@ -735,11 +735,10 @@ static int _hotspotfd_ping_v6(char *ipv6address)
                 msg_debug("pckt.hdr.checksum: %d\n", pckt.hdr.checksum);
                 msg_debug("pckt.hdr.code    : %d\n", pckt.hdr.code);
                 msg_debug("pckt.hdr.type    : %d\n", pckt.hdr.type);
-                if(pckt.hdr.type == ICMP6_ECHO_REPLY && pckt.hdr.code == 0 )
+
+                if ((pckt.hdr.type == ICMP6_ECHO_REPLY) && (pckt.hdr.code == 0))
                 {
-                     char payloadreply[16];
-                     snprintf(payloadreply, sizeof(payloadreply), "%s", pckt.msg);
-                     if (strcmp(payloadreply, "Hotspot6") == 0)
+                     if (memcmp(pckt.msg, "Hotspot6", 9) == 0)
                      {
                          status = STATUS_SUCCESS;
                          break;
@@ -752,10 +751,10 @@ static int _hotspotfd_ping_v6(char *ipv6address)
             }
             bzero(&pckt, sizeof(pckt));
             pckt.hdr.type = ICMP6_ECHO_REQUEST;
+            pckt.hdr.code = 0;
             pckt.hdr.un.echo.id = pid;
-            strncpy(pckt.msg, "Hotspot6",8);
-            pckt.msg[8] = '\0';
             pckt.hdr.un.echo.sequence = cnt++;
+            memcpy(pckt.msg, "Hotspot6", 9);
             pckt.hdr.checksum = hotspotfd_checksum(&pckt, sizeof(pckt));
             bytes = sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr_ping, sizeof(*addr_ping)) ;
             if (bytes <=0)
