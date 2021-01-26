@@ -55,6 +55,7 @@
 
 #define kHotspotfd_primary                  "hotspotfd-primary"                // ip address of primary
 #define khotspotfd_secondary                "hotspotfd-secondary"              // ip address of secondary
+#define khotspotfd_ep_count                 "hotspotfd-ep-count"               // Tracks the number of EP's configured
 #define khotspotfd_keep_alive               "hotspotfd-keep-alive"             // time in secs between pings
 #define khotspotfd_keep_alive_threshold     "hotspotfd-threshold"              // failed ping's before switching EP
 #define khotspotfd_max_secondary            "hotspotfd-max-secondary"          // max. time allowed on secondary
@@ -105,6 +106,7 @@ typedef struct
 typedef enum {
     HOTSPOTFD_PRIMARY,
     HOTSPOTFD_SECONDARY,
+    HOTSPOTFD_EPCOUNT,
     HOTSPOTFD_KEEPALIVE,
     HOTSPOTFD_THRESHOLD,
     HOTSPOTFD_MAXSECONDARY,
