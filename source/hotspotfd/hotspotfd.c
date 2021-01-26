@@ -96,6 +96,7 @@
 
 #define kMax_InterfaceLength            20
 #define DEBUG_INI_NAME "/etc/debug.ini"
+#define MAX_RANDOM_INTERVAL 60
 
 extern  ANSC_HANDLE             bus_handle;
 static char ssid_reset_mask = 0x0;
@@ -150,6 +151,7 @@ static int  gKeepAliveChecksumCnt = 0;
 static int  gKeepAliveSequenceCnt = 0;   
 static int  gDeadInterval = 5 * kDefault_KeepAliveInterval;   
 static char gKeepAliveInterface[kMax_InterfaceLength];
+static int  gNumberofEPConfigured = 0;
 
 static bool gbFirstPrimarySignal = true;
 static bool gbFirstSecondarySignal = true;
@@ -208,6 +210,7 @@ typedef enum {
 typedef enum {
     HOTSPOTFD_PRIMARY,
     HOTSPOTFD_SECONDARY,
+    HOTSPOTFD_EPCOUNT,
     HOTSPOTFD_KEEPALIVE,
     HOTSPOTFD_THRESHOLD,
     HOTSPOTFD_MAXSECONDARY,
@@ -235,6 +238,7 @@ typedef struct
 Hotspotfd_MsgItem hotspotfdMsgArr[] = {
     {"hotspotfd-primary",                             HOTSPOTFD_PRIMARY},
     {"hotspotfd-secondary",                           HOTSPOTFD_SECONDARY},
+    {"hotspotfd-ep-count",                            HOTSPOTFD_EPCOUNT},
     {"hotspotfd-keep-alive",                          HOTSPOTFD_KEEPALIVE},
     {"hotspotfd-threshold",                           HOTSPOTFD_THRESHOLD},
     {"hotspotfd-max-secondary",                       HOTSPOTFD_MAXSECONDARY},
@@ -1006,8 +1010,10 @@ static void *hotspotfd_sysevent_handler(void *data)
 {
     UNREFERENCED_PARAMETER(data);
     async_id_t hotspotfd_primary_id;
-    async_id_t hotspotfd_secondary_id; 
+    async_id_t hotspotfd_secondary_id;
+    async_id_t hotspotfd_ep_count;
     async_id_t hotspotfd_keep_alive_id;
+    async_id_t hotspotfd_dead_interval;
     async_id_t hotspotfd_keep_alive_threshold_id;
     async_id_t hotspotfd_max_secondary_id;
     async_id_t hotspotfd_policy_id;
@@ -1029,7 +1035,9 @@ static void *hotspotfd_sysevent_handler(void *data)
 
     sysevent_setnotification(sysevent_fd, sysevent_token, kHotspotfd_primary,              &hotspotfd_primary_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_secondary,            &hotspotfd_secondary_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_ep_count,             &hotspotfd_ep_count);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_keep_alive,           &hotspotfd_keep_alive_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_dead_interval,        &hotspotfd_dead_interval);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_keep_alive_threshold, &hotspotfd_keep_alive_threshold_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_max_secondary,        &hotspotfd_max_secondary_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_keep_alive_policy,    &hotspotfd_policy_id);
@@ -1100,6 +1108,11 @@ static void *hotspotfd_sysevent_handler(void *data)
                 pthread_mutex_lock(&keep_alive_mutex);
                 gbFirstSecondarySignal = true;
                 pthread_mutex_unlock(&keep_alive_mutex);
+
+            } else if (ret_value == HOTSPOTFD_EPCOUNT) {
+                gNumberofEPConfigured = atoi(val);
+
+                msg_debug("gNumberofEPConfigured : %u\n", gNumberofEPConfigured);
 
             } else if (ret_value == HOTSPOTFD_KEEPALIVE) {
                 gKeepAliveInterval = atoi(val);
@@ -1402,6 +1415,23 @@ static int hotspotfd_getStartupParameters(void)
             break;
         }
 
+        // Number of EP configured 
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_ep_count, buf, sizeof(buf)))) {
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_ep_count, status));
+            status = STATUS_FAILURE;
+            break;
+        }
+
+        gNumberofEPConfigured = atoi(buf);
+        if (gNumberofEPConfigured > 0) {
+            msg_debug("Loaded sysevent %s with %d\n", khotspotfd_ep_count, gNumberofEPConfigured);
+        } else {
+
+            CcspTraceError(("No End points configured, gNumberofEPConfigured : %d\n", gNumberofEPConfigured));
+            status = STATUS_FAILURE;
+            break;
+        }
+
         // Secondary EP
         if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_secondary, buf, sizeof(buf)))) {
             CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_secondary, status)); 
@@ -1435,7 +1465,8 @@ static int hotspotfd_getStartupParameters(void)
         }
 
         gKeepAliveInterval = atoi(buf);
-        if (gKeepAliveInterval > 0) {
+        //MVXREQ-1237 :- A HealthCheckInterval of 0 MUST disable the initial and subsequent periodic checks
+        if (gKeepAliveInterval >= 0) {
             msg_debug("Loaded sysevent %s with %d\n", khotspotfd_keep_alive, gKeepAliveInterval); 
         } else {
 
@@ -1443,6 +1474,25 @@ static int hotspotfd_getStartupParameters(void)
             status = STATUS_FAILURE;
             break;
         }
+        
+        //RecoveryCheckInterval
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_dead_interval, buf, sizeof(buf)))) {
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", khotspotfd_dead_interval, status));
+            status = STATUS_FAILURE;
+            break;
+        }
+
+        gDeadInterval = atoi(buf);
+
+        if (gDeadInterval >= 0) {
+            msg_debug("Loaded sysevent %s with %d\n", khotspotfd_dead_interval, gDeadInterval);
+        } else {
+
+            CcspTraceError(("Invalid gDeadInterval: %d\n", gDeadInterval));
+            status = STATUS_FAILURE;
+            break;
+        }
+
 
         // Keep Alive Threshold
         if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_keep_alive_threshold, buf, sizeof(buf)))) {
@@ -1636,6 +1686,27 @@ static int hotspotfd_getStartupParameters(void)
 }
 #endif
 
+int randomInt()
+{
+       srand(time(0));
+       int randInterval = (rand() % ( MAX_RANDOM_INTERVAL) );
+       return randInterval;
+}
+
+void destroyCurrentTunnel()
+{
+       pthread_mutex_lock(&keep_alive_mutex);
+       gbFirstPrimarySignal = true;
+       gBothDnFirstSignal = false;
+       gbFirstSecondarySignal = true;
+       pthread_mutex_unlock(&keep_alive_mutex);
+       if (sysevent_set(sysevent_fd_gs, sysevent_token_gs,
+                       kHotspotfd_tunnelEP, "", 0)) {
+            CcspTraceError(("sysevent set %s failed \n", kHotspotfd_tunnelEP));
+       }
+       gTunnelIsUp=false;
+       return;
+}
 
 void hotspot_start()
 {
@@ -1701,6 +1772,78 @@ void hotspot_start()
 
     while (gKeepAliveEnable == true) {
        PrimaryFirstAttempt = true;
+
+        //MVXREQ-1237 :- Consider primary EP active incase single EP configured or heathcheck disabled
+        if( gNumberofEPConfigured == 1 || gKeepAliveInterval == 0){
+
+            gPrimaryIsActive = true;
+            gSecondaryIsActive = false;
+            gPrimaryIsAlive = true;
+            gPriStateIsDown = false;
+            gBothDnFirstSignal = true;
+
+            gKeepAlivesReceived++;
+            keepAliveThreshold = 0;
+
+            if (gKeepAliveLogEnable) {
+                 hotspotfd_log();
+            }
+
+            if (gbFirstPrimarySignal) {
+
+                 if(ssid_reset_mask != 0) 
+                 {
+                     if(TRUE == set_validatessid())
+                     {
+                          CcspTraceInfo(("SSID's updated before creating tunnels. \n"));
+                     }
+                     else
+                     {
+                           CcspTraceInfo(("SSID's are not updated before creating tunnels. \n"));
+                     }
+                 } 
+
+                 CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));
+                 t2_event_d("SYS_INFO_Create_GRE_Tunnel", 1);
+
+
+                 if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
+                                     kHotspotfd_tunnelEP, gpPrimaryEP, 0)) {
+
+                 CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
+                 }
+#if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_))
+                 hotspotfd_syncMultinet();
+#endif
+                 gTunnelIsUp=true;
+					
+                 pthread_mutex_lock(&keep_alive_mutex);
+                 gbFirstPrimarySignal = false;
+                 pthread_mutex_unlock(&keep_alive_mutex);
+                 CcspTraceInfo(("Primary GRE flag set to %d\n", gbFirstPrimarySignal));
+                 msg_debug("Primary GRE Tunnel Endpoint is alive\n");
+                 msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
+                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);	
+                 }
+
+                 char primaryEP[kMax_IPAddressLength];
+                 errno_t rc = -1;
+                 rc = strcpy_s(primaryEP, sizeof(primaryEP), gpPrimaryEP);
+                 if (rc != EOK) {
+                     ERR_CHK(rc);
+                     return /* STATUS_FAILURE */;
+                 }
+ 
+            while ( gNumberofEPConfigured == 1 || gKeepAliveInterval == 0 ){
+                 sleep(1);
+                 if (gKeepAliveEnable == false || strncmp(primaryEP,gpPrimaryEP,sizeof(primaryEP)) != 0 ){
+                      break;
+                 }
+            }
+            destroyCurrentTunnel(); 
+            continue;
+        }
+
 Try_primary:
         while (gPrimaryIsActive && (gKeepAliveEnable == true)) {
 
@@ -1768,7 +1911,11 @@ Try_primary:
                 }
 
 				if (gKeepAliveEnable == false) continue;
-				hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), true); //Tunnel Alive case
+				if ((gNumberofEPConfigured == 1) || (gKeepAliveInterval == 0)) {
+					destroyCurrentTunnel();
+					goto keep_it_alive;
+				}
+				hotspotfd_sleep(gKeepAliveInterval, true); //Tunnel Alive case
                 if (gKeepAliveEnable == false) continue;
 
             } else {
@@ -1779,7 +1926,11 @@ Try_primary:
 				//if (gKeepAliveEnable == false) continue;
 				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                 //if (gKeepAliveEnable == false) continue;
-
+                if ( gNumberofEPConfigured == 1 || gKeepAliveInterval == 0 ){
+                    destroyCurrentTunnel();
+                    goto keep_it_alive;
+                }
+                //MVXREQ-1237 No such requirement gKeepAliveThreshold default value is configured to 1 
                 if (keepAliveThreshold < gKeepAliveThreshold) {
 					if (gKeepAliveEnable == false) continue;
 					hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case				
@@ -1856,22 +2007,19 @@ Try_secondary:
                 // Check for absolute max. secondary active interval
                 // TODO: If reached tunnel should be swicthed to primary
                 //if (secondaryKeepAlives > gSecondaryMaxTime/60) {
-
-				if( timeElapsed > gSecondaryMaxTime ) {
+                
+                if( gNumberofEPConfigured == 1 || gKeepAliveInterval == 0) {
 
                     gPrimaryIsActive = true;
 					//ARRISXB3-2770 When there is switch in tunnel , existing tunnel should be destroyed and created with new reachable tunnel as GW.
                     /* Coverity Fix CID:140439 MISSING_LOCK */
-                        pthread_mutex_lock(&keep_alive_mutex);
-                         gbFirstPrimarySignal = true;
-                    pthread_mutex_unlock(&keep_alive_mutex);
-		CcspTraceInfo((" GRE flag set to %d in try secondary\n", gbFirstPrimarySignal));				
+                    CcspTraceInfo((" GRE flag set to %d in try secondary\n", gbFirstPrimarySignal));				
 					// fix ends
                     gSecondaryIsActive = false;
                     keepAliveThreshold = 0;
                     secondaryKeepAlives = 0;
-					CcspTraceInfo(("Max. Secondary EP time:%d exceeded. Switching to Primary EP\n", gSecondaryMaxTime));
-
+                    CcspTraceInfo(("Health Check configuration changed / Secondary EP removed , moving back to Primary EP\n"));
+                    destroyCurrentTunnel();
                     // TODO: Do we just destroy this tunnel and move over
                     // to the primary? What if the Primary is down then we switched
                     // for no reason?
@@ -1915,12 +2063,12 @@ Try_secondary:
                 msg_debug("Secondary GRE Tunnel Endpoint is alive\n");
                 msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
                 msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
-				if (gKeepAliveEnable == false) continue;
-				hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), true); //Tunnel Alive case
+                if (gKeepAliveEnable == false) continue;
+                hotspotfd_sleep(gKeepAliveInterval, true); //Tunnel Alive case
                 if (gKeepAliveEnable == false) continue;
 
             } else {
-				CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive\n", gpSecondaryEP));
+                CcspTraceInfo(("Secondary GRE Tunnel Endpoint:%s is not alive\n", gpSecondaryEP));
                 gSecondaryIsAlive = false;
                    
                 if(ssid_reset_mask == 0)
@@ -1943,6 +2091,7 @@ Try_secondary:
 				//if (gKeepAliveEnable == false) continue;
 				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                 //if (gKeepAliveEnable == false) continue;
+                //MVXREQ-1237 No such requirement gKeepAliveThreshold default value is configured to 1
                 if (keepAliveThreshold < gKeepAliveThreshold) {
 					if (gKeepAliveEnable == false) continue;
 					hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
@@ -1979,6 +2128,8 @@ Try_secondary:
 		//gTunnelIsUp==false;
 		while (gKeepAliveEnable == true) {
 			gKeepAlivesSent++;
+			if ( gNumberofEPConfigured == 1 || gKeepAliveInterval == 0 )
+				goto keep_it_alive;
 			if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp, true) == STATUS_SUCCESS) {
 				gPrimaryIsActive = true;
                 gSecondaryIsActive = false;
@@ -1989,7 +2140,8 @@ Try_secondary:
                 gSecondaryIsActive = true;
 				goto Try_secondary;
 			}
-			hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure, false);			
+			//MVXREQ-1237 If both Ep's are down wait for RecoveryCheckInterval for next try
+			hotspotfd_sleep((gDeadInterval+randomInt()), false);			
 		}
     } 
 
