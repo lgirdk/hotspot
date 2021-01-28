@@ -57,6 +57,9 @@
 #include "safec_lib_common.h"
 
 #define mylist_safe(p, q, h) \
+         if ((h)->n == NULL ) { \
+                SET_LIST_HEAD((h)); \
+         } \
          for (p = (h)->n, q = p->n; p != (h); \
                  p = q, q = p->n)
 
@@ -1308,7 +1311,9 @@ void *dhcp_snooper_init(void *data)
     netlinkHandle = nfq_nfnlh(nfqHandle);
     fd = nfnl_fd(netlinkHandle);
     msg_debug("%s fd=%d\n", __func__, fd);
-    SET_LIST_HEAD(&gSnoop_ClientList.list);
+    if (gSnoop_ClientList.list.n == NULL) {
+        SET_LIST_HEAD(&gSnoop_ClientList.list);
+    }
 
     rc = strcpy_s(gCircuit_id, sizeof(gCircuit_id), kSnoop_DefaultCircuitID);
 	if(rc != EOK)
