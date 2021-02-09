@@ -69,12 +69,7 @@
 
 #define kHotspotfd_primary_len                  kMax_IPAddressLength             
 #define khotspotfd_secondary_len                kMax_IPAddressLength           
-#define khotspotfd_keep_alive_len               3
-#define khotspotfd_keep_alive_threshold_len     3
-#define khotspotfd_max_secondary_len            5
 #define kHotspotfd_tunnelEP_len                 kMax_IPAddressLength
-#define khotspotfd_policy_len                   4
-#define khotspotfd_keep_alive_count_len         1
 
 typedef struct
 {
