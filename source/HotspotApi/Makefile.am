@@ -16,4 +16,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = arp_solicitation hotspotfd HotspotApi
+lib_LTLIBRARIES = libHotspotApi.la
+
+AM_CFLAGS = -I$(top_srcdir)/source
+AM_CFLAGS += -I$(top_srcdir)/source/include
+AM_CFLAGS += -I$(top_srcdir)/source/util
+AM_CFLAGS += -DWBCFG_MULTI_COMP_SUPPORT
+
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -ljansson
+
+libHotspotApi_la_SOURCES = libHotspot.h libHotspotApi.h HotspotApi.c HotspotLib.c HotspotJansson.c

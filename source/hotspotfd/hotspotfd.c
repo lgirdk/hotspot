@@ -171,6 +171,7 @@ bool gSnoopRemoteEnabled = true;
 int gSnoopFirstQueueNumber = kSnoop_DefaultQueue;
 int gSnoopNumberOfQueues = kSnoop_DefaultNumberOfQueues;
 
+bool gWebConfTun = true;
 
 int gSnoopMaxNumberOfClients = kSnoop_DefaultMaxNumberOfClients;
 char gSnoopCircuitIDList[kSnoop_MaxCircuitIDs][kSnoop_MaxCircuitLen];
@@ -1412,6 +1413,7 @@ void hotspot_start()
 	time_t currentTime ;
 	int timeElapsed;
 	errno_t rc = -1;
+        int   ret   = 0; 
 
     rc = strcpy_s(gKeepAliveInterface, sizeof(gKeepAliveInterface), "erouter0");
 	if(rc != EOK)
@@ -1508,6 +1510,14 @@ Try_primary:
                                      kHotspotfd_tunnelEP, gpPrimaryEP, 0)) {
 
                         CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
+                    }
+                    if (false == gWebConfTun){ 
+		        ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_UP");
+                        if ( ret != CCSP_SUCCESS )
+                        {
+                             CcspTraceError(("%s : TunnelStatus send data failed,  ret value is %d\n",__FUNCTION__ ,ret));
+                        }
+                        gWebConfTun = true;
                     }
                     #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_))
                     hotspotfd_syncMultinet();
@@ -1646,6 +1656,12 @@ Try_secondary:
 
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
+                    gWebConfTun = false;
+		    ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "SEC_TUNNEL_UP");
+                    if ( ret != CCSP_SUCCESS )
+                    {
+                          CcspTraceError(("%s : TunnelStatus send data failed,  ret value is %d\n",__FUNCTION__ ,ret));
+                    }
                     #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_))
                     hotspotfd_syncMultinet();
 		    #endif
@@ -1706,6 +1722,12 @@ Try_secondary:
                                          kHotspotfd_tunnelEP, "\0", 0)) {
 
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
+                        }
+			/*Signal wifi module for tunnel down */
+			ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus", "TUNNEL_DOWN");
+                        if ( ret != CCSP_SUCCESS )
+                        {
+                              CcspTraceError(("%s : TunnelStatus send data failed,  ret value is %d\n",__FUNCTION__ ,ret));
                         }
 						gTunnelIsUp=false;
 						break;
