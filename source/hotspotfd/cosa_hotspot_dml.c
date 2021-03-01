@@ -76,10 +76,13 @@
 BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* ParamName, char* strValue)
 {
 	int l_iAddOrDelete, l_iSsidIndex, l_iRssi; 
-    char l_cMacAddr[20] = {0};
+    char l_cMacAddr[20];
 	errno_t rc = -1;
     int ind = -1;
     char *ret = NULL;
+
+    rc = memset_s(l_cMacAddr, sizeof(l_cMacAddr), '\0', sizeof(l_cMacAddr));
+    ERR_CHK(rc);
 
     rc = strcmp_s("ClientChange", strlen("ClientChange"),ParamName, &ind);
     ERR_CHK(rc);
@@ -88,7 +91,7 @@ BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* P
                 ret = strrchr(strValue, '|');
                 if((ret != NULL) && (strlen(++ret) >= sizeof(l_cMacAddr)))
                     return FALSE;
-
+                CcspTraceInfo(("Received Client MAC and other details: %s\n", strValue));
                 rc = sscanf_s(strValue, "%d|%d|%d|%s", &l_iAddOrDelete, &l_iSsidIndex, &l_iRssi, l_cMacAddr);
                 if(rc < EOK || rc == EOF)
                 {
