@@ -59,7 +59,7 @@
 #include <sys/ioctl.h>
 #include <pthread.h>
 #include "libnetfilter_queue/libnetfilter_queue.h"
-
+#include "secure_wrapper.h"
 /**************************************************
 ******** MACRO DEFINITIONS **************************
 **************************************************/
@@ -222,8 +222,7 @@ int main (int argc, char *argv[])
 
     if (hotspot_arpd_init() < 0)
         goto exit;
-   
-    system("touch /tmp/hotspot_arpd_up"); 
+    v_secure_system("touch /tmp/hotspot_arpd_up"); 
     hotspot_arpd_nfqueue_handler((void*)&g_nfqueue);
     
 cleanup:

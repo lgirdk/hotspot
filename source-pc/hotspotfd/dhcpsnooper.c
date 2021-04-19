@@ -49,6 +49,7 @@
  */
 
 #include "dhcpsnooper.h"
+#include "secure_wrapper.h"
 
 #define mylist_safe(p, q, h) \
          for (p = (h)->n, q = p->n; p != (h); \
@@ -803,7 +804,7 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
     int count = 0;
     unsigned long wifi_count = 0;
     int signalstrength = 0;
-
+    int ret = 0;
 
     // The iptables queue number is passed when this handler is registered
     // with nfq_create_queue
@@ -1045,23 +1046,30 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 				}
 				strcpy(l_cHostName, g_cHostnameForQueue[queue_number]);
 #if 1//LNT_EMU
-             	fp = popen("iw dev wlan0_0 station dump | grep avg | tr -s ' ' | cut -d ' ' -f 2 > publicwifi_signalstrength.txt","r");
-             	pclose(fp);
-             	fp = popen("cat publicwifi_signalstrength.txt | wc -l","r");
-        	fgets(str, sizeof(str)-1, fp);
-        	wifi_count = (unsigned long) atol ( str );
-	        pclose(fp);
-        	fp = popen("cat publicwifi_signalstrength.txt | tr -s ' ' | cut -f 2","r");
+                v_secure_system("iw dev wlan0_0 station dump | grep avg | tr -s ' ' | cut -d ' ' -f 2 > publicwifi_signalstrength.txt");
+             	fp = v_secure_popen("r", "cat publicwifi_signalstrength.txt | wc -l");
+                if (fp) {
+        	    fgets(str, sizeof(str)-1, fp);
+        	    wifi_count = (unsigned long) atol ( str );
+                    ret = v_secure_pclose(fp);
+                    if(ret != 0){
+                        CcspTraceWarning(("Error in closing pipe! ret val: %d \n", ret));
+                    }
+                }
+        	fp = v_secure_popen("r", "cat publicwifi_signalstrength.txt | tr -s ' ' | cut -f 2");
 	        if(fp)
         	{
-	       for(count = 0 ; count < wifi_count ; count++)
-        	{
-                	fgets(str,1024,fp);
+	            for(count = 0 ; count < wifi_count ; count++)
+        	    {
+                       	fgets(str,1024,fp);
                 	signalstrength = atoi(str);
                 	snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName, signalstrength);
-        	}	
+        	    }	
+	            ret = v_secure_pclose(fp);
+                    if(ret != 0){
+                        CcspTraceWarning(("Error in closing pipe! ret val: %d \n", ret));
+                    }
         	}			
-	        pclose(fp);
 #endif
 
 		//		snoop_AddClientListEntry(gRemote_id, gCircuit_id, "ACK", ipv4_addr, l_cHostName, 0);LNT_EMU

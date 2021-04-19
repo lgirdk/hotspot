@@ -23,5 +23,5 @@ AM_CFLAGS += -I$(top_srcdir)/source-pc/include
 AM_CFLAGS += -I$(top_srcdir)/source-pc/util 
 AM_CFLAGS += -I$(top_srcdir)/source-pc/hotspotfd/include
 
-AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -lsecure_wrapper
 CcspHotspot_SOURCES = hotspotfd.c dhcpsnooper.c ssp_messagebus_interface.c ssp_main.c ssp_action.c cosa_hotspot_dml.c plugin_main.c

@@ -61,6 +61,7 @@
 #include "ansc_platform.h"
 #include "libnetfilter_queue/libnetfilter_queue.h"
 #include "safec_lib_common.h"
+#include "secure_wrapper.h"
 
 /**************************************************
 ******** MACRO DEFINITIONS **************************
@@ -201,7 +202,7 @@ int main (int argc, char *argv[])
 {
     int opt, rc = -1;
 	errno_t rc1 = -1;
-    
+
     while ((opt = getopt(argc, argv, "i:q:vdh")) != -1){
         switch(opt){
         case 'v':
@@ -238,8 +239,8 @@ int main (int argc, char *argv[])
 
     if (hotspot_arpd_init() < 0)
         goto exit;
-   
-    system("touch /tmp/hotspot_arpd_up"); 
+
+    v_secure_system("touch /tmp/hotspot_arpd_up");
     hotspot_arpd_nfqueue_handler((void*)&g_nfqueue);
 
 //cleanup:

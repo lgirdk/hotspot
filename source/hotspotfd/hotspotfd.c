@@ -73,7 +73,7 @@
 #include "ccsp_trace.h"
 #include "dhcpsnooper.h"
 #include "safec_lib_common.h"
-
+#include "secure_wrapper.h"
 #include <telemetry_busmessage_sender.h>
 
 #define PACKETSIZE  64
@@ -1462,7 +1462,8 @@ void hotspot_start()
         msg_debug("Failed to catch SIGTERM\n");
 
     CcspTraceInfo(("Hotspotfd process is up\n"));
-    system("touch /tmp/hotspotfd_up");
+
+    v_secure_system("touch /tmp/hotspotfd_up");
     hotspotfd_log();
 
     keep_it_alive:

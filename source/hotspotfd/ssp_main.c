@@ -40,6 +40,7 @@
 #include "stdlib.h"
 #include "ccsp_dm_api.h"
 #include "hotspotfd.h"
+#include "secure_wrapper.h"
 #include "safec_lib_common.h"
 #include <telemetry_busmessage_sender.h>
 
@@ -197,8 +198,8 @@ int main(int argc, char* argv[])
     BOOL bRunAsDaemon = TRUE;
     int cmdChar = 0;
     int idx = 0;
-	errno_t rc = -1;
-	int ind = -1;
+    errno_t rc = -1;
+    int ind = -1;
 
     extern ANSC_HANDLE bus_handle;
     char *subSys = NULL;  
@@ -338,8 +339,7 @@ int main(int argc, char* argv[])
         exit(1);
     }
     rdk_logger_init(DEBUG_INI_NAME);
-    system("touch /tmp/hotspot_initialized");
-
+    v_secure_system("touch /tmp/hotspot_initialized");
     hotspot_start();
     if ( bRunAsDaemon )
     {

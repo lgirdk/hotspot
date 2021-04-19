@@ -20,7 +20,7 @@ bin_PROGRAMS = hotspot_arpd
 
 AM_CFLAGS = -I$(top_srcdir)/source-pc -I$(top_srcdir)/source-pc/include -I$(top_srcdir)/source-pc/util
 
-AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -lnetfilter_queue -lnfnetlink
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -lnetfilter_queue -lnfnetlink -lsecure_wrapper
 
 hotspot_arpd_SOURCES = hotspot_arpd.c
 

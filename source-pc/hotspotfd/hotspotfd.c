@@ -56,6 +56,7 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <linux/if.h>
+#include "secure_wrapper.h"
 
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
     #include <sysevent/sysevent.h>
@@ -1171,7 +1172,8 @@ void hotspot_start()
         msg_debug("Failed to catch SIGTERM\n");
 
     CcspTraceInfo(("Hotspotfd process is up\n"));
-    system("touch /tmp/hotspotfd_up");
+    v_secure_system("touch /tmp/hotspotfd_up");
+
     hotspotfd_log();
 
     keep_it_alive:
