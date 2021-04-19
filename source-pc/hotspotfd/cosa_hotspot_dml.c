@@ -75,7 +75,7 @@ BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* P
 	int l_iAddOrDelete, l_iSsidIndex, l_iRssi; 
     char l_cMacAddr[20] = {0};
 
-	if (AnscEqualString(ParamName, "ClientChange", TRUE))
+	if (strcmp(ParamName, "ClientChange") == 0)
     {   
 		sscanf(strValue, "%d|%d|%d|%s", &l_iAddOrDelete, &l_iSsidIndex, &l_iRssi, l_cMacAddr);
 		if (1 == l_iAddOrDelete)
@@ -102,7 +102,7 @@ HotspotConnectedDevice_GetParamStringValue
     )
 {
     /* check the parameter name and return the corresponding value */
-    if( AnscEqualString(ParamName, "ClientChange", TRUE))
+    if (strcmp(ParamName, "ClientChange") == 0)
     {
         return 0;
     }
