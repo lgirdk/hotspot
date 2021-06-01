@@ -1231,6 +1231,32 @@ static int hotspotfd_getStartupParameters(void)
             status = STATUS_FAILURE;
             break;
         }
+#ifdef FEATURE_SUPPORT_MAPT_NAT46
+        // Keep Alive Interface
+        if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, SYSEVENT_MAPT_CONFIG_FLAG, buf, sizeof(buf)))) {
+            CcspTraceError(("sysevent_get failed to get %s: %d\n", SYSEVENT_MAPT_CONFIG_FLAG, status));
+            status = STATUS_FAILURE;
+            break;
+        }
+
+        if (strncmp(buf,"set", 3) == 0)
+        {
+          rc = strcpy_s(gKeepAliveInterface, sizeof(gKeepAliveInterface), "map0");
+        }
+        else
+        {
+#endif
+          rc = strcpy_s(gKeepAliveInterface, sizeof(gKeepAliveInterface), "erouter0");
+#ifdef FEATURE_SUPPORT_MAPT_NAT46
+        }
+#endif
+        if(rc != EOK)
+        {
+          ERR_CHK(rc);
+          status = STATUS_FAILURE;
+          break;
+        }
+        msg_debug("gKeepAliveInterface = %s\n", gKeepAliveInterface);
 
         // Keep Alive Interval
         if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, khotspotfd_keep_alive, buf, sizeof(buf)))) {
@@ -1433,17 +1459,10 @@ void hotspot_start()
 	time_t secondaryEndPointstartTime;
 	time_t currentTime ;
 	unsigned int timeElapsed;
-	errno_t rc = -1;
         int   ret   = 0; 
     bool PrimaryFirstAttempt = true;
     bool SecondaryFirstAttempt = true;
 
-    rc = strcpy_s(gKeepAliveInterface, sizeof(gKeepAliveInterface), "erouter0");
-	if(rc != EOK)
-	{
-		ERR_CHK(rc);
-		return;
-	}
 	gKeepAliveEnable = true;
 
 #ifdef __HAVE_SYSEVENT__

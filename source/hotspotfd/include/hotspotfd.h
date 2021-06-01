@@ -71,6 +71,10 @@
 #define khotspotfd_secondary_len                kMax_IPAddressLength           
 #define kHotspotfd_tunnelEP_len                 kMax_IPAddressLength
 
+#ifdef FEATURE_SUPPORT_MAPT_NAT46
+#define SYSEVENT_MAPT_CONFIG_FLAG "mapt_config_flag"
+#endif
+
 typedef struct
 {
     char primaryEP[kMax_IPAddressLength];

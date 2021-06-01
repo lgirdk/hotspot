@@ -63,6 +63,12 @@
 #include "safec_lib_common.h"
 #include "secure_wrapper.h"
 
+#ifdef FEATURE_SUPPORT_MAPT_NAT46
+#include <sysevent/sysevent.h>
+#define SYSEVENT_MAPT_CONFIG_FLAG "mapt_config_flag"
+#define SYSEVENT_MAPT_IP_ADDRESS "mapt_ip_address"
+#endif
+
 /**************************************************
 ******** MACRO DEFINITIONS **************************
 **************************************************/
@@ -336,12 +342,38 @@ static int get_interface_by_ifname(if_t *target)
     }
     target->ifindex = req.ifr_ifindex;
 
-    if (ioctl(fd, SIOCGIFADDR, &req) == -1){
-        printf("Failed to ioctl SIOCGIFADDR!\n");
-        close(fd);
-        return FALSE;
+    int mapt_ipv4 = 0;
+#ifdef FEATURE_SUPPORT_MAPT_NAT46
+    int sysevent_fd_gs;
+    token_t sysevent_token_gs;
+    char buf[32]={0};
+    sysevent_fd_gs = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, "hotspot_arpd", &sysevent_token_gs);
+
+    if(sysevent_fd_gs >= 0)
+    {
+        sysevent_get(sysevent_fd_gs, sysevent_token_gs, SYSEVENT_MAPT_CONFIG_FLAG, buf, sizeof(buf));
+
+        if (strncmp(buf,"set", 3) == 0)
+        {
+            sysevent_get(sysevent_fd_gs, sysevent_token_gs, SYSEVENT_MAPT_IP_ADDRESS, buf, sizeof(buf));
+
+            if(inet_aton(buf,&(target->ip)))
+            {
+                mapt_ipv4 = 1;
+            }
+        }
+        sysevent_close(sysevent_fd_gs, sysevent_token_gs);
     }
-    target->ip = ((struct sockaddr_in *)&req.ifr_addr)->sin_addr;
+#endif
+    if(0 == mapt_ipv4)
+    {
+        if (ioctl(fd, SIOCGIFADDR, &req) == -1){
+            printf("Failed to ioctl SIOCGIFADDR!\n");
+            close(fd);
+            return FALSE;
+        }
+        target->ip = ((struct sockaddr_in *)&req.ifr_addr)->sin_addr;
+    }
 
     close(fd);
     
