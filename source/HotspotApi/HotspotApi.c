@@ -589,7 +589,10 @@ pErr setHotspot(void* const network){
          hotspot_sysevent_disable_param();
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
+         strncpy(gPriEndptIP, "0.0.0.0", SIZE_OF_IP);
+         strncpy(gSecEndptIP, "0.0.0.0", SIZE_OF_IP);
          gXfinityEnable = false;
+         tunnel_param_synchronize();
      }
     execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
     return execRetVal;
