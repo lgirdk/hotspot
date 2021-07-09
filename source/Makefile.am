@@ -17,3 +17,7 @@
 # limitations under the License.
 ##########################################################################
 SUBDIRS = arp_solicitation hotspotfd HotspotApi
+
+if WITH_GTEST_SUPPORT
+SUBDIRS += test
+endif
