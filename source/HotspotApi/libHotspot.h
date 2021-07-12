@@ -99,4 +99,6 @@ int getHotspotVapIndex(char *vapName);
 int create_tunnel(char *gre_primary_endpoint);
 int hotspot_sysevent_enable_param();
 bool get_ssid_enable(int ssidIdx);
+int  validateIpAddress(char *ipAddress);
+int prepareFirstRollback(tunneldoc_t *network);
 #endif

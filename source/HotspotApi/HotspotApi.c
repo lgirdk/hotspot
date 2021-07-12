@@ -383,7 +383,7 @@ void configHotspotBridgeVlan(char *vapName, int wan_vlan){
      addBrideAndVlan( getHotspotVapIndex( vapName), wan_vlan);
 }
 
-static int  validateIpAddress(char *ipAddress){
+int  validateIpAddress(char *ipAddress){
  
     int result = -1;
     struct sockaddr_in sa; 
@@ -449,13 +449,31 @@ PsmGet(const char *param, char *value, int size)
     return 0;
 }
 
-bool prepareFirstRollback(tunneldoc_t *network){
-    UNREFERENCED_PARAMETER(network);
+int 
+PsmSet(const char *param, const char *value)
+{
+    if (PSM_Set_Record_Value2(bus_handle, g_Subsystem,
+                (char *)param, ccsp_string, (char *)value) != CCSP_SUCCESS)
+        return -1; 
+    return 0;
+}
+
+int prepareFirstRollback(tunneldoc_t *network){
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s function....... \n", __FUNCTION__));
-    bool ret = false;
-    jansson_store_tunnel_info(NULL);
+    int ret = 0;
+
+    ret  = jansson_store_tunnel_info(network);
+    CcspTraceInfo(("HOTSPOT_LIB : %s Ret status.......%d \n", __FUNCTION__, ret));
+
+    if(ret > 0){
+       if(ret == 2){
+           return ret;
+       }
+       return ret;
+    }else{
+       return ret;    
+    }
 //Prash TODO: Find the delta and then store if needed
-    return ret;    
 }
 
 pErr setHotspot(void* const network){
@@ -467,7 +485,7 @@ pErr setHotspot(void* const network){
      int    vlanid = 0;
      char   cmdBuf[1024] = {0};
      FILE   *fptr = NULL;
-     bool   status = false;
+     int   status = 0;
      char val[16] = {0};
 //PRASH: Check if this is the very first webconfig on this device and if legacy 
 //hotspot was enabled , if so store the previous configuration for the rollback 
@@ -498,12 +516,18 @@ pErr setHotspot(void* const network){
            CcspTraceError(("HOTSPOT_LIB : Very first blob and existing hotspot exists, prepare the rollback %s \n", __FUNCTION__));
            status  =  prepareFirstRollback(pGreTunnelData);
 
-           if(true == status){
+           if(1 == status){
                CcspTraceError(("HOTSPOT_LIB : Very first blob with exist legacy config. Storing it...  %s \n", __FUNCTION__));
-               jansson_store_tunnel_info(pGreTunnelData);
                execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
                return execRetVal;
+           }else {
+                 if(2 == status){
+                     execRetVal->ErrorCode = INVALID_IP;
+                     strncpy(execRetVal->ErrorMsg,"Invalid Pri/Sec Endpoint IP in legacy config",sizeof(execRetVal->ErrorMsg)-1);
+                     return execRetVal;
+                 }
            }
+   
      }
      else {
           if(fptr){
@@ -544,7 +568,14 @@ pErr setHotspot(void* const network){
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
          strncpy(gPriEndptIP, pGreTunnelData->entries->gre_primary_endpoint,SIZE_OF_IP);
-         strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
+
+         if((0 == strcmp(gSecEndptIP, "")) || (0 == strcmp(gSecEndptIP, " ")) || (0 == strcmp(gSecEndptIP, "0.0.0.0"))){
+               CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
+               strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
+         }
+         else{
+               strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
+         }
          gXfinityEnable = true;
          /* Deleting existing Tunnels*/
          deleteVaps();
@@ -581,6 +612,7 @@ pErr setHotspot(void* const network){
                    }
               }
          }
+         PsmSet(PSM_HOTSPOT_ENABLE, "1");
          jansson_store_tunnel_info(pGreTunnelData);
      }
      else{
@@ -592,6 +624,7 @@ pErr setHotspot(void* const network){
          strncpy(gPriEndptIP, "0.0.0.0", SIZE_OF_IP);
          strncpy(gSecEndptIP, "0.0.0.0", SIZE_OF_IP);
          gXfinityEnable = false;
+         PsmSet(PSM_HOTSPOT_ENABLE, "0");
          tunnel_param_synchronize();
      }
     execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;

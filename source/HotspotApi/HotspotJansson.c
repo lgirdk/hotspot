@@ -76,8 +76,16 @@ bool jansson_rollback_tunnel_info() {
                 json_string_value(jsecEndpoint), SIZE_OF_IP);
     }
     memset(gSecEndptIP, '\0', sizeof(gSecEndptIP)); 
-    strncpy(gSecEndptIP, secEndIp, SIZE_OF_IP);
-    CcspTraceInfo(("HOTSPOT_LIB : file load hotspot json sec end ip...%s \n", secEndIp));
+    CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip secEndIp = %s len of sec = %d \n", secEndIp, strlen(secEndIp)));
+
+    if((0 == strcmp(secEndIp, "")) || (0 == strcmp(secEndIp, " ")) || (0 == strcmp(secEndIp, "0.0.0.0"))){
+        CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
+        strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
+    }
+    else{
+        strncpy(gSecEndptIP, secEndIp, SIZE_OF_IP);
+    }
+    CcspTraceInfo(("HOTSPOT_LIB : file load hotspot json sec end ip...%s \n", gSecEndptIP));
 
     json_t *jdscp = json_object_get(json_tun_root, "gre_dscp");
     if (jdscp && json_is_integer(jdscp)){
@@ -88,12 +96,12 @@ bool jansson_rollback_tunnel_info() {
     //CcspTraceInfo(("HOTSPOT_LIB : file load hotspot json dscp...%d\n", rNetwork->entries->gre_dscp));
     
     json_t *jgre_enable = json_object_get(json_tun_root, "gre_enable");
-    if (jgre_enable && json_is_integer(jgre_enable)){
+    if (jgre_enable && json_is_boolean(jgre_enable)){
 
-        gre_enable = json_integer_value(jgre_enable);
+        gre_enable = json_boolean_value(jgre_enable);
     }
     CcspTraceInfo(("HOTSPOT_LIB : file load hotspot gre_enable...%d \n", gre_enable));
-    if(!gre_enable){
+    if(gre_enable){
          create_tunnel(priEndIp);
     }
 
@@ -121,8 +129,8 @@ bool jansson_rollback_tunnel_info() {
                   rollback_vapBridge(name, json_integer_value(jsonVapID));
              }
          }
-         hotspot_sysevent_enable_param();
-         firewall_restart();
+         //hotspot_sysevent_enable_param();
+         //firewall_restart();
      }
      json_decref(jsonVapID);
      json_decref(jsonVapenable);
@@ -186,13 +194,29 @@ int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
         int outt = 0;
         outt = json_dump_file(root, "/tmp/hotspot.json", 0);
         CcspTraceInfo(("HOTSPOT_LIB : JSON file ret...%d\n", outt));
+
+        json_decref(json_arr_vlan_id);
+        json_decref(json_arr_vap_enable);
+        json_decref(json_arr_vap_name);
+        json_decref(json_tun);
+        json_decref(root);
+
+        return 0;
     } else
     {
         CcspTraceInfo(("HOTSPOT_LIB : %s Just storing existing Xfinity setting in rollback\n",__FUNCTION__));
-        PsmGet(PSM_PRI_IP, psm_val, sizeof(psm_val));        
+        PsmGet(PSM_PRI_IP, psm_val, sizeof(psm_val));
+        if((validateIpAddress(psm_val) != 1)){
+           CcspTraceError(("HOTSPOT_LIB : Invalid Primary Endpoint IP in json store\n"));
+           return 2;
+        }
         json_object_set_new( root, "gre_primary_endpoint", json_string(psm_val));
         memset(psm_val, 0, sizeof(psm_val));
         PsmGet(PSM_SEC_IP, psm_val, sizeof(psm_val));        
+        if((validateIpAddress(psm_val) != 1)){
+           CcspTraceError(("HOTSPOT_LIB : Invalid Secondary Endpoint IP in json store\n"));
+           return 2;
+        }
         json_object_set_new( root, "gre_secondary_endpoint", json_string(psm_val));
         memset(psm_val, 0, sizeof(psm_val));
         PsmGet(PSM_DSCP_MARK, psm_val, sizeof(psm_val));        
@@ -223,12 +247,13 @@ int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
         int outt = 0;
         outt = json_dump_file(root, "/nvram/hotspot.json", 0);
         CcspTraceInfo(("HOTSPOT_LIB : JSON file ret...%d\n", outt));
+
+        json_decref(json_arr_vlan_id);
+        json_decref(json_arr_vap_enable);
+        json_decref(json_arr_vap_name);
+        json_decref(json_tun);
+        json_decref(root);
+
+        return 1;
     } 
-    json_decref(json_arr_vlan_id);
-    json_decref(json_arr_vap_enable);
-    json_decref(json_arr_vap_name);
-    json_decref(json_tun);
-    json_decref(root);
-    
-    return 0;
 }

@@ -1597,6 +1597,10 @@ Try_secondary:
             if (gKeepAliveLogEnable) {
                 hotspotfd_log();
             }
+            if((0 == strcmp(gpSecondaryEP, "")) || (0 == strcmp(gpSecondaryEP, " ")) || (0 == strcmp(gpSecondaryEP, "0.0.0.0"))){
+                   CcspTraceInfo(("Secondary endpoint ip is invalid, Using primary EP IP \n"));
+                   strncpy(gpSecondaryEP, gpPrimaryEP, 40);
+            }
 
             if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
                 gPrimaryIsActive = false;
@@ -1653,7 +1657,7 @@ Try_secondary:
                 }    
 
                 if (gbFirstSecondarySignal) {
-					CcspTraceInfo(("Create Secondary GRE tunnel with endpoint:%s\n", gpSecondaryEP));
+                    CcspTraceInfo(("Create Secondary GRE tunnel with endpoint:%s\n", gpSecondaryEP));
 
                     if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
                                      kHotspotfd_tunnelEP, gpSecondaryEP, 0)) {
