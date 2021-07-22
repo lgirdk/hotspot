@@ -219,10 +219,12 @@ static int deleteVaps(){
      for(index = 0; index < MAX_VAP; index++){
             offset = 0;
             memset(cmdBuf, '\0', sizeof(cmdBuf));
+#if !defined(_COSA_INTEL_XB3_ARM_)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
                                   IP_DEL, gVlanSyncData[index].vapInterface);
+#endif
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ", IP_DEL, gVlanSyncData[index].bridgeName);
