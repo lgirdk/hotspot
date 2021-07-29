@@ -71,6 +71,9 @@
 #endif
 #define VAP_NAME     30
 
+#define N_HOTSPOT_JSON   "/nvram/hotspot.json"
+#define T_HOTSPOT_JSON   "/tmp/hotspot.json"
+
 
 /* Structure for Sync vlan and brdige interface */
 typedef enum {
@@ -100,5 +103,5 @@ int create_tunnel(char *gre_primary_endpoint);
 int hotspot_sysevent_enable_param();
 bool get_ssid_enable(int ssidIdx);
 int  validateIpAddress(char *ipAddress);
-int prepareFirstRollback(tunneldoc_t *network);
+int prepareFirstRollback();
 #endif

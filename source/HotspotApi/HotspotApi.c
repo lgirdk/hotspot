@@ -121,7 +121,7 @@ bool tunnel_param_synchronize() {
 
 static void sys_execute_cmd(char *cmd){
 
-    CcspTraceError(("HOTSPOT_LIB : Entering  %s\n", __FUNCTION__));
+    CcspTraceInfo(("HOTSPOT_LIB : Entering  %s\n", __FUNCTION__));
     system(cmd);
     return;
 }
@@ -460,11 +460,11 @@ PsmSet(const char *param, const char *value)
     return 0;
 }
 
-int prepareFirstRollback(tunneldoc_t *network){
+int prepareFirstRollback(){
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s function....... \n", __FUNCTION__));
     int ret = 0;
 
-    ret  = jansson_store_tunnel_info(network);
+    ret  = jansson_store_tunnel_info(NULL);
     CcspTraceInfo(("HOTSPOT_LIB : %s Ret status.......%d \n", __FUNCTION__, ret));
 
     if(ret > 0){
@@ -486,8 +486,8 @@ pErr setHotspot(void* const network){
      int    index = 0;
      int    vlanid = 0;
      char   cmdBuf[1024] = {0};
-     FILE   *fptr = NULL;
      int   status = 0;
+     int   file_status = 0;
      char val[16] = {0};
 //PRASH: Check if this is the very first webconfig on this device and if legacy 
 //hotspot was enabled , if so store the previous configuration for the rollback 
@@ -511,36 +511,29 @@ pErr setHotspot(void* const network){
 
      pGreTunnelData = (tunneldoc_t *)network;
  
-     fptr = fopen("/nvram/hotspot.json" , "r");
      PsmGet(PSM_HOTSPOT_ENABLE, val, sizeof(val));
-     CcspTraceInfo(("HOTSPOT_LIB : %s Existing Xfinity settings: enabled == %s function....... \n", __FUNCTION__, val));
-     if((NULL == fptr) && (atoi(val) == TRUE)){
-           CcspTraceError(("HOTSPOT_LIB : Very first blob and existing hotspot exists, prepare the rollback %s \n", __FUNCTION__));
-           status  =  prepareFirstRollback(pGreTunnelData);
+     file_status = access(N_HOTSPOT_JSON, F_OK);
+     CcspTraceInfo(("HOTSPOT_LIB : %s Existing Xfinity settings: enabled == %s jsone file_status = %d....... \n", __FUNCTION__, val, file_status));
+     if((file_status != 0) && (atoi(val) == TRUE)){
+           CcspTraceInfo(("HOTSPOT_LIB : Very first blob and existing hotspot exists, prepare the rollback %s \n", __FUNCTION__));
+           status  =  prepareFirstRollback();
 
            if(1 == status){
-               CcspTraceError(("HOTSPOT_LIB : Very first blob with exist legacy config. Storing it...  %s \n", __FUNCTION__));
-               execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
-               return execRetVal;
+               CcspTraceInfo(("HOTSPOT_LIB : Legacy config Stored...  %s \n", __FUNCTION__));
            }else {
                  if(2 == status){
-                     execRetVal->ErrorCode = INVALID_IP;
-                     strncpy(execRetVal->ErrorMsg,"Invalid Pri/Sec Endpoint IP in legacy config",sizeof(execRetVal->ErrorMsg)-1);
-                     return execRetVal;
+                     CcspTraceInfo(("HOTSPOT_LIB : Invalid IP address in exist legacy config...  %s \n", __FUNCTION__));
                  }
            }
    
      }
      else {
-          if(fptr){
-           CcspTraceError(("HOTSPOT_LIB : hotspot.json file available in nvram.  %s \n", __FUNCTION__));
+          if(file_status == 0){
+           CcspTraceInfo(("HOTSPOT_LIB : hotspot.json file available in nvram.  %s \n", __FUNCTION__));
           } else{
      
-            CcspTraceError(("HOTSPOT_LIB : Previously Xfinity was disabled, no need to prepare rollback data  %s \n", __FUNCTION__));
+            CcspTraceInfo(("HOTSPOT_LIB : Previously Xfinity was disabled, no need to prepare rollback data  %s \n", __FUNCTION__));
           }
-     }
-     if(fptr != NULL) {
-      fclose(fptr);
      }
 
      if(true == pGreTunnelData->entries->gre_enable){
@@ -556,27 +549,25 @@ pErr setHotspot(void* const network){
          if((validateIpAddress(pGreTunnelData->entries->gre_primary_endpoint) != 1))
          {
              CcspTraceError(("HOTSPOT_LIB : Invalid Primary Endpoint IP\n"));
-             execRetVal->ErrorCode = INVALID_IP;
+             execRetVal->ErrorCode = VALIDATION_FALIED;
              strncpy(execRetVal->ErrorMsg,"Invalid Primary Endpoint IP",sizeof(execRetVal->ErrorMsg)-1);
              return execRetVal;
          }
          if((validateIpAddress(pGreTunnelData->entries->gre_sec_endpoint) != 1))
          {
              CcspTraceError(("HOTSPOT_LIB : Invalid Secondary Endpoint IP\n"));
-             execRetVal->ErrorCode = INVALID_IP;
+             execRetVal->ErrorCode = VALIDATION_FALIED;
              strncpy(execRetVal->ErrorMsg,"Invalid Secondary Endpoint IP",sizeof(execRetVal->ErrorMsg)-1);
              return execRetVal;
          }
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
          strncpy(gPriEndptIP, pGreTunnelData->entries->gre_primary_endpoint,SIZE_OF_IP);
+         strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
 
          if((0 == strcmp(gSecEndptIP, "")) || (0 == strcmp(gSecEndptIP, " ")) || (0 == strcmp(gSecEndptIP, "0.0.0.0"))){
                CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
                strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
-         }
-         else{
-               strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
          }
          gXfinityEnable = true;
          /* Deleting existing Tunnels*/
@@ -597,7 +588,7 @@ pErr setHotspot(void* const network){
 //for the pods.
                    if(!((vlanid >= 102) && (vlanid <= 4094))){
                         CcspTraceError(("HOTSPOT_LIB : Vlan ID is out of range \n "));
-                        execRetVal->ErrorCode = INVALID_VLANID_RANGE;
+                        execRetVal->ErrorCode = VALIDATION_FALIED;
                         strncpy(execRetVal->ErrorMsg,"Vlan ID is out of range",sizeof(execRetVal->ErrorMsg)-1);
                         return execRetVal;
                    }
@@ -608,7 +599,7 @@ pErr setHotspot(void* const network){
                    retValue = update_bridge_config( getHotspotVapIndex(pGreTunnelData->entries->table_param->entries[index].vap_name));
                    if(-1 == retValue){
                         CcspTraceError(("HOTSPOT_LIB : Vap Name incorrect \n "));
-                        execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
+                        execRetVal->ErrorCode = VALIDATION_FALIED;
                         strncpy(execRetVal->ErrorMsg,"Incorrect VAP name",sizeof(execRetVal->ErrorMsg)-1);
                         return execRetVal;
                    }
@@ -682,7 +673,7 @@ int confirmVap(){
     int    offset = 0;
     int    index = 0;
 #endif
-    FILE   *fptr = NULL;
+    int    file_status = 0;
  
  
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s \n",__FUNCTION__));
@@ -706,16 +697,13 @@ int confirmVap(){
         }
     }
 #endif
-     fptr = fopen("/tmp/hotspot.json" , "r");
+     file_status = access(T_HOTSPOT_JSON, F_OK);
 
-     if(NULL == fptr){
+     if(file_status != 0){
            CcspTraceError(("HOTSPOT_LIB : hotspot.json file not available in tmp  %s \n", __FUNCTION__));
            memset((char *)execRetVal,0,sizeof(Err));
            execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
            return (int)execRetVal;
-     }
-     if(fptr != NULL) {
-      fclose(fptr);
      }
      memset(Buf, '\0', sizeof(Buf));
 //PRASH: Lock /nvram/hotspot.json before copying 

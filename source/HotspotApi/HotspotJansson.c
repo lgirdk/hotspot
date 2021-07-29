@@ -206,6 +206,7 @@ int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
     {
         CcspTraceInfo(("HOTSPOT_LIB : %s Just storing existing Xfinity setting in rollback\n",__FUNCTION__));
         PsmGet(PSM_PRI_IP, psm_val, sizeof(psm_val));
+        CcspTraceInfo(("HOTSPOT_LIB : PSM rollback pri ip...%s\n", psm_val));
         if((validateIpAddress(psm_val) != 1)){
            CcspTraceError(("HOTSPOT_LIB : Invalid Primary Endpoint IP in json store\n"));
            return 2;
@@ -213,6 +214,7 @@ int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
         json_object_set_new( root, "gre_primary_endpoint", json_string(psm_val));
         memset(psm_val, 0, sizeof(psm_val));
         PsmGet(PSM_SEC_IP, psm_val, sizeof(psm_val));        
+        CcspTraceInfo(("HOTSPOT_LIB : PSM rollback sec ip...%s\n", psm_val));
         if((validateIpAddress(psm_val) != 1)){
            CcspTraceError(("HOTSPOT_LIB : Invalid Secondary Endpoint IP in json store\n"));
            return 2;
@@ -221,8 +223,10 @@ int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
         memset(psm_val, 0, sizeof(psm_val));
         PsmGet(PSM_DSCP_MARK, psm_val, sizeof(psm_val));        
         json_object_set_new( root, "gre_dscp", json_string(psm_val));
+        CcspTraceInfo(("HOTSPOT_LIB : PSM rollback dscp...%s\n", psm_val));
         memset(psm_val, 0, sizeof(psm_val));
         PsmGet(PSM_HOTSPOT_ENABLE, psm_val, sizeof(psm_val));        
+        CcspTraceInfo(("HOTSPOT_LIB : PSM rollback hotspot enable...%s\n", psm_val));
         json_object_set_new( root, "gre_enable", json_boolean(atoi(psm_val) ? true:false));
         memset(psm_val, 0, sizeof(psm_val));
 
@@ -236,6 +240,7 @@ int jansson_store_tunnel_info(tunneldoc_t *pTunnelVap) {
             memset(vlan_val, 0, sizeof(vlan_val));
             snprintf(vlan_val, sizeof(vlan_val), PSM_VLANID, i+1);
             PsmGet(vlan_val, psm_val, sizeof(psm_val));
+            CcspTraceInfo(("HOTSPOT_LIB : PSM rollback vap enable...%s index...%d\n", psm_val,  i));
             json_array_append( json_arr_vlan_id, json_integer(atoi(psm_val)));
             json_array_append( json_arr_vap_enable, json_boolean(get_ssid_enable(gVlanSyncData[i].ssidIdx)));
         }
