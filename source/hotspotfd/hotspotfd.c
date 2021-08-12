@@ -1534,9 +1534,6 @@ Try_primary:
 		    CcspTraceInfo(("Primary GRE flag set to %d\n", gbFirstPrimarySignal));				
                 }
 
-                msg_debug("Primary GRE Tunnel Endpoint is alive\n");
-                msg_debug("gKeepAlivesSent: %u\n", gKeepAlivesSent);
-                msg_debug("gKeepAlivesReceived: %u\n", gKeepAlivesReceived);
 				if (gKeepAliveEnable == false) continue;
 				hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), true); //Tunnel Alive case
                 if (gKeepAliveEnable == false) continue;
