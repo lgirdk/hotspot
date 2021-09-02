@@ -35,10 +35,17 @@ vlanSyncData_s gVlanSyncData[] = {
 };
 #elif defined (_XB7_PRODUCT_REQ_)|| defined (_XF3_PRODUCT_REQ_)
 vlanSyncData_s gVlanSyncData[] = {
+#if defined(_INTEL_WAV_)
+     {VAP_NAME_4, "wlan0.2", "brlan2", 0x1, 5},
+     {VAP_NAME_5, "wlan2.2", "brlan3", 0x2, 6},
+     {VAP_NAME_8, "wlan0.4", "brlan4", 0x4, 9},
+     {VAP_NAME_9, "wlan2.4", "brlan5", 0x8, 10}
+#else
      {VAP_NAME_4, "wl0.2", "brlan2", 0x1, 5},
      {VAP_NAME_5, "wl1.2", "brlan3", 0x2, 6},
      {VAP_NAME_8, "wl0.4", "brlan4", 0x4, 9},
      {VAP_NAME_9, "wl1.4", "brlan5", 0x8, 10}
+#endif
 };
 #elif defined(_COSA_INTEL_XB3_ARM_)
 vlanSyncData_s gVlanSyncData[] = {
