@@ -96,7 +96,7 @@ static inline void mylist_del(struct mylist_head *e)
     e->n = 0;
     e->p = 0;
 }
-
+static pthread_mutex_t global_stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned int glog_level = kSnoop_LOG_NOISE;
 static char gCircuit_id[kSnoop_MaxCircuitLen];
 static char gRemote_id[kSnoop_MaxRemoteLen]; 
@@ -158,8 +158,8 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
     snooper_priv_client_list * pNewClient;
     struct mylist_head * pos, * q;
     bool already_in_list = false;
-	errno_t rc = -1;
-
+    errno_t rc = -1;
+    pthread_mutex_lock(&global_stats_mutex);
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
@@ -169,29 +169,31 @@ static void snoop_AddClientListHostname(char *pHostname, char *pRemote_id, int q
          }
     }
 
-    if(already_in_list) 
+    if(already_in_list)
     {
           CcspTraceInfo(("Client:%s is present update hostname:%s\n", pRemote_id, pHostname));
         /* Coverity Fix CID:135307 STRING_OVERFLOW*/
         rc = strcpy_s(pNewClient->client.hostname,sizeof(pNewClient->client.hostname), pHostname);
-		if(rc != EOK)
-		{
-			ERR_CHK(rc);
-			return;
-		}
+                if(rc != EOK)
+                {
+                        ERR_CHK(rc);
+                        pthread_mutex_unlock(&global_stats_mutex);
+                        return;
+                }
         /*Coverity Fix CID 144092 Buffer Overflow*/
         pNewClient->client.hostname[ sizeof(pNewClient->client.hostname) -1 ] = '\0';
     }
         /* Coverity Fix CID:135307 STRING_OVERFLOW */
         /* Coverity Fix CID:64398 DC. STRING_BUFFER */
         rc = strcpy_s(g_cHostnameForQueue[queue_number], sizeof(g_cHostnameForQueue[queue_number]), pHostname);
-		if(rc != EOK)
-		{
-			ERR_CHK(rc);
-			return;
-		}
-         g_cHostnameForQueue[queue_number][sizeof(g_cHostnameForQueue[queue_number]) - 1] = '\0';
-        
+                if(rc != EOK)
+                {
+                        ERR_CHK(rc);
+                        pthread_mutex_unlock(&global_stats_mutex);
+                        return;
+                }
+        g_cHostnameForQueue[queue_number][sizeof(g_cHostnameForQueue[queue_number]) - 1] = '\0';
+        pthread_mutex_unlock(&global_stats_mutex);
 }
 
 static int snoop_addRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number) {
@@ -530,7 +532,7 @@ void snoop_log(void)
 {
     FILE *logOut;
     int i = 0;
-	errno_t rc = -1;
+    errno_t rc = -1;
     snooper_priv_client_list * pClient;
     struct mylist_head * pos, * q;
 
@@ -540,77 +542,79 @@ void snoop_log(void)
         CcspTraceError(("Could not open dhcp_snooperd.log file\n"));
         return;
     }
-    
-        fprintf(logOut, "gSnoopEnable: %d\n", gSnoopEnable);
-        fprintf(logOut, "gSnoopDebugEnabled: %d\n", gSnoopDebugEnabled);
+    fprintf(logOut, "gSnoopEnable: %d\n", gSnoopEnable);
+    fprintf(logOut, "gSnoopDebugEnabled: %d\n", gSnoopDebugEnabled);
 
-        fprintf(logOut, "Agent Circuit ID: %s\n", gCircuit_id);     
-        fprintf(logOut, "Agent Remote ID: %s\n", gRemote_id);  
+    fprintf(logOut, "Agent Circuit ID: %s\n", gCircuit_id);
+    fprintf(logOut, "Agent Remote ID: %s\n", gRemote_id);
 
-        fprintf(logOut, "gSnoopCircuitEnabled: %d\n", gSnoopCircuitEnabled);     
-        fprintf(logOut, "gSnoopRemoteEnabled: %d\n", gSnoopRemoteEnabled);    
+    fprintf(logOut, "gSnoopCircuitEnabled: %d\n", gSnoopCircuitEnabled);
+    fprintf(logOut, "gSnoopRemoteEnabled: %d\n", gSnoopRemoteEnabled);
 
-        fprintf(logOut, "gSnoopFirstQueueNumber: %d\n", gSnoopFirstQueueNumber);  
-        fprintf(logOut, "gSnoopNumberOfQueues: %d\n", gSnoopNumberOfQueues);  
+    fprintf(logOut, "gSnoopFirstQueueNumber: %d\n", gSnoopFirstQueueNumber);
+    fprintf(logOut, "gSnoopNumberOfQueues: %d\n", gSnoopNumberOfQueues);
 
-        for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues+gSnoopFirstQueueNumber; i++) {
-            fprintf(logOut, "gSnoopCircuitIDList[%d]: %s\n", i, gSnoopCircuitIDList[i]); 
-        }
+    for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues+gSnoopFirstQueueNumber; i++) {
+        fprintf(logOut, "gSnoopCircuitIDList[%d]: %s\n", i, gSnoopCircuitIDList[i]);
+    }
 
-        fprintf(logOut, "kSnoop_MaxNumberOfQueues: %d\n", kSnoop_MaxNumberOfQueues);  
-        fprintf(logOut, "gSnoopNumCapturedPackets: %d\n", gSnoopNumCapturedPackets);
+    fprintf(logOut, "kSnoop_MaxNumberOfQueues: %d\n", kSnoop_MaxNumberOfQueues);
+    fprintf(logOut, "gSnoopNumCapturedPackets: %d\n", gSnoopNumCapturedPackets);
 
-        fprintf(logOut, "gSnoopMaxNumberOfClients: %d\n", gSnoopMaxNumberOfClients);
-        fprintf(logOut, "gSnoopNumberOfClients: %d\n", gSnoopNumberOfClients);
+    fprintf(logOut, "gSnoopMaxNumberOfClients: %d\n", gSnoopMaxNumberOfClients);
+    fprintf(logOut, "gSnoopNumberOfClients: %d\n", gSnoopNumberOfClients);
 
-        fprintf(logOut, "Client list:\n");
-        mylist_safe(pos, q, &gSnoop_ClientList.list) {
-    
-             pClient= mylist_entry(pos, snooper_priv_client_list, list);
+    fprintf(logOut, "Client list:\n");
+    pthread_mutex_lock(&global_stats_mutex);
+    mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
-             fprintf(logOut, "pClient->client.remote_id: %s\n", pClient->client.remote_id); 
-             fprintf(logOut, "pClient->client.circuit_id: %s\n", pClient->client.circuit_id); 
-             fprintf(logOut, "pClient->client.ipv4_addr: %s\n", pClient->client.ipv4_addr); 
-             fprintf(logOut, "pClient->client.hostname: %s\n", pClient->client.hostname);
-             fprintf(logOut, "pClient->client.dhcp_status: %s\n", pClient->client.dhcp_status); 
-             fprintf(logOut, "pClient->client.rssi: %d\n\n", pClient->client.rssi); 
-        }
+         pClient= mylist_entry(pos, snooper_priv_client_list, list);
 
-        fclose(logOut);
+         fprintf(logOut, "pClient->client.remote_id: %s\n", pClient->client.remote_id);
+         fprintf(logOut, "pClient->client.circuit_id: %s\n", pClient->client.circuit_id);
+         fprintf(logOut, "pClient->client.ipv4_addr: %s\n", pClient->client.ipv4_addr);
+         fprintf(logOut, "pClient->client.hostname: %s\n", pClient->client.hostname);
+         fprintf(logOut, "pClient->client.dhcp_status: %s\n", pClient->client.dhcp_status);
+         fprintf(logOut, "pClient->client.rssi: %d\n\n", pClient->client.rssi);
+    }
 
-        gpSnoop_Stats->snooper_enabled = gSnoopEnable;
-        gpSnoop_Stats->snooper_debug_enabled = gSnoopDebugEnabled;
-        gpSnoop_Stats->snooper_circuit_id_enabled = gSnoopCircuitEnabled;
-        gpSnoop_Stats->snooper_remote_id_enabled = gSnoopRemoteEnabled;
+    fclose(logOut);
 
-        gpSnoop_Stats->snooper_first_queue = gSnoopFirstQueueNumber;   
-        gpSnoop_Stats->snooper_num_queues = gSnoopNumberOfQueues;
-        gpSnoop_Stats->snooper_max_queues = kSnoop_MaxNumberOfQueues;
-        gpSnoop_Stats->snooper_dhcp_packets = gSnoopNumCapturedPackets;
+    gpSnoop_Stats->snooper_enabled = gSnoopEnable;
+    gpSnoop_Stats->snooper_debug_enabled = gSnoopDebugEnabled;
+    gpSnoop_Stats->snooper_circuit_id_enabled = gSnoopCircuitEnabled;
+    gpSnoop_Stats->snooper_remote_id_enabled = gSnoopRemoteEnabled;
 
-        gpSnoop_Stats->snooper_max_clients = gSnoopMaxNumberOfClients;
-        gpSnoop_Stats->snooper_num_clients = gSnoopNumberOfClients;
+    gpSnoop_Stats->snooper_first_queue = gSnoopFirstQueueNumber;
+    gpSnoop_Stats->snooper_num_queues = gSnoopNumberOfQueues;
+    gpSnoop_Stats->snooper_max_queues = kSnoop_MaxNumberOfQueues;
+    gpSnoop_Stats->snooper_dhcp_packets = gSnoopNumCapturedPackets;
 
-        i = 0;
-        mylist_safe(pos, q, &gSnoop_ClientList.list) {
-    
-             pClient= mylist_entry(pos, snooper_priv_client_list, list);
+    gpSnoop_Stats->snooper_max_clients = gSnoopMaxNumberOfClients;
+    gpSnoop_Stats->snooper_num_clients = gSnoopNumberOfClients;
 
-             printf("pClient->client.circuit_id[%d]: %s\n", i, pClient->client.circuit_id);
-             printf("pClient->client.dhcp_status[%d]: %s\n", i, pClient->client.dhcp_status);
-             printf("pClient->client.hostname[%d]: %s\n", i, pClient->client.hostname);
-             printf("pClient->client.ipv4_addr[%d]: %s\n", i, pClient->client.ipv4_addr);
-             printf("pClient->client.remote_id[%d]: %s\n", i, pClient->client.remote_id);
-             printf("pClient->client.rssi[%d]: %d\n", i, pClient->client.rssi);
+    i = 0;
+    mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
-             rc = memcpy_s(&gpSnoop_Stats->snooper_clients[i],  sizeof(snooper_client_list), &pClient->client,  sizeof(snooper_client_list));
-             if(rc != EOK)
-             {
-                ERR_CHK(rc);
-                return ;
-             }
-             i++;
-        }
+         pClient= mylist_entry(pos, snooper_priv_client_list, list);
+
+         printf("pClient->client.circuit_id[%d]: %s\n", i, pClient->client.circuit_id);
+         printf("pClient->client.dhcp_status[%d]: %s\n", i, pClient->client.dhcp_status);
+         printf("pClient->client.hostname[%d]: %s\n", i, pClient->client.hostname);
+         printf("pClient->client.ipv4_addr[%d]: %s\n", i, pClient->client.ipv4_addr);
+         printf("pClient->client.remote_id[%d]: %s\n", i, pClient->client.remote_id);
+         printf("pClient->client.rssi[%d]: %d\n", i, pClient->client.rssi);
+
+         rc = memcpy_s(&gpSnoop_Stats->snooper_clients[i],  sizeof(snooper_client_list), &pClient->client,  sizeof(snooper_client_list));
+         if(rc != EOK)
+         {
+            ERR_CHK(rc);
+            pthread_mutex_unlock(&global_stats_mutex);
+            return ;
+         }
+         i++;
+    }
+    pthread_mutex_unlock(&global_stats_mutex);
 }
 
 void snoop_RemoveClientListEntry(char *pRemote_id)
@@ -618,7 +622,8 @@ void snoop_RemoveClientListEntry(char *pRemote_id)
     bool already_in_list = false;
     struct mylist_head * pos, * q;
     snooper_priv_client_list * pNewClient;
-    
+    pthread_mutex_lock(&global_stats_mutex);
+
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
@@ -634,10 +639,14 @@ void snoop_RemoveClientListEntry(char *pRemote_id)
         free(pNewClient);
 
         gSnoopNumberOfClients--;
+        pthread_mutex_unlock(&global_stats_mutex);
 
         msg_debug("Removed from client list: %s\n", pRemote_id);
-        msg_debug("Number of clients: %d\n", gSnoopNumberOfClients); 
-		snoop_log();
+        msg_debug("Number of clients: %d\n", gSnoopNumberOfClients);
+        snoop_log();
+    }
+    else {
+        pthread_mutex_unlock(&global_stats_mutex);
     }
 }
 
@@ -675,14 +684,15 @@ static void snoop_CheckClientIsPrivate(char *pRemote_id)
     fclose(l_dnsfp);
 }
 
-static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id, 
+static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
                                   char *pDhcp_status, char *pIpv4_addr, char *pHostname, int rssi)
 {
-	errno_t rc = -1;
+    errno_t rc = -1;
     snooper_priv_client_list * pNewClient;
     struct mylist_head * pos, * q;
     bool already_in_list = false;
 
+    pthread_mutex_lock(&global_stats_mutex);
     mylist_safe(pos, q, &gSnoop_ClientList.list) {
 
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
@@ -694,121 +704,123 @@ static void snoop_AddClientListEntry(char *pRemote_id, char *pCircuit_id,
 
     if(!already_in_list) {
 
-        if(gSnoopNumberOfClients < gSnoopMaxNumberOfClients) { 
-    
+        if(gSnoopNumberOfClients < gSnoopMaxNumberOfClients) {
+
             pNewClient= (snooper_priv_client_list *)malloc(sizeof(snooper_priv_client_list));
-                        /* Coverity Fix CID:59806 NULL_RETURNS */	
+                        /* Coverity Fix CID:59806 NULL_RETURNS */
                         if( pNewClient != NULL )
                         {
                            rc = memset_s(pNewClient, sizeof(snooper_priv_client_list), 0x00, sizeof(snooper_priv_client_list));
-						   ERR_CHK(rc);
-           
+                           ERR_CHK(rc);
+
                           if (NULL == pCircuit_id)
                           {
                              rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id );
                              if(rc != EOK)
-							 {
-								 ERR_CHK(rc);
-								 free(pNewClient);
-								 return;
-							 }
-                                                         /* Coverity Fix CID: 144090 Buffer Overflow*/
-							 pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) -1] = '\0';
+                             {
+                                 ERR_CHK(rc);
+                                 free(pNewClient);
+                                 goto mutex_cleanup;
+                             }
+                             /* Coverity Fix CID: 144090 Buffer Overflow*/
+                             pNewClient->client.remote_id[ sizeof(pNewClient->client.remote_id) -1] = '\0';
                           }
-                           else
+                          else
                           {
                                 /* Coverity Fix  CID:135344,69252 STRING_OVERFLOW*/
                                 rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id );
-								if(rc != EOK)
-							    {
-								  ERR_CHK(rc);
-								  free(pNewClient);
-								  return;
-							    }
+                                if(rc != EOK)
+                                {
+                                     ERR_CHK(rc);
+                                     free(pNewClient);
+                                     goto mutex_cleanup;
+                                }
                                 rc = strcpy_s(pNewClient->client.circuit_id, sizeof(pNewClient->client.circuit_id), pCircuit_id);
-								if(rc != EOK)
-							    {
-								  ERR_CHK(rc);
-								  free(pNewClient);
-								  return;
-							    }
+                                if(rc != EOK)
+                                {
+                                     ERR_CHK(rc);
+                                     free(pNewClient);
+                                     goto mutex_cleanup;
+                                }
                                 rc = strcpy_s(pNewClient->client.dhcp_status, sizeof(pNewClient->client.dhcp_status), pDhcp_status );
-								if(rc != EOK)
-							    {
-								  ERR_CHK(rc);
-								  free(pNewClient);
-								  return;
-							    }
+                                if(rc != EOK)
+                                {
+                                     ERR_CHK(rc);
+                                     free(pNewClient);
+                                     goto mutex_cleanup;
+                                }
                                 rc = strcpy_s(pNewClient->client.ipv4_addr, sizeof(pNewClient->client.ipv4_addr), pIpv4_addr);
-								if(rc != EOK)
-							    {
-								  ERR_CHK(rc);
-								  free(pNewClient);
-								  return;
-							    }
+                                if(rc != EOK)
+                                {
+                                     ERR_CHK(rc);
+                                     free(pNewClient);
+                                     goto mutex_cleanup;
+                                }
                                 rc = strcpy_s(pNewClient->client.hostname,  sizeof(pNewClient->client.hostname), pHostname);
-								if(rc != EOK)
-							    {
-								  ERR_CHK(rc);
-								  free(pNewClient);
-								  return;
-							    }
+                                if(rc != EOK)
+                                {
+                                     ERR_CHK(rc);
+                                     free(pNewClient);
+                                     goto mutex_cleanup;
+                                }
                           }
                            pNewClient->client.rssi = rssi;
-                           pNewClient->client.noOfTriesForOnlineCheck = 0; 
+                           pNewClient->client.noOfTriesForOnlineCheck = 0;
                            mylist_add(&pNewClient->list, &gSnoop_ClientList.list);
                            gSnoopNumberOfClients++;
-                        } 
+                        }
                         else
                         {
                            CcspTraceError(("%s:pNewClient attain NULL\n",__FUNCTION__));
 
-			}
+                        }
         } else {
             CcspTraceError(("Max. number of clients %d already in list\n", gSnoopNumberOfClients));
-	    t2_event_d("SYS_INFO_Hotspot_MaxClients", 1);
+            t2_event_d("SYS_INFO_Hotspot_MaxClients", 1);
         }
     } else {
         msg_debug("Client %s already in list.\n", pRemote_id);
-		if ((NULL != pCircuit_id && '\0' != pCircuit_id[0]))
-		{
-			rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id);
-			if(rc != EOK)
-			{
-				ERR_CHK(rc);
-				return;
-			}
-			rc = strcpy_s(pNewClient->client.circuit_id, sizeof(pNewClient->client.circuit_id), pCircuit_id);
-			if(rc != EOK)
-			{
-				ERR_CHK(rc);
-				return;
-			}
-			rc = strcpy_s(pNewClient->client.dhcp_status, sizeof(pNewClient->client.dhcp_status), pDhcp_status);
-			if(rc != EOK)
-			{
-				ERR_CHK(rc);
-				return;
-			}
-			rc = strcpy_s(pNewClient->client.ipv4_addr, sizeof(pNewClient->client.ipv4_addr), pIpv4_addr);
-			if(rc != EOK)
-			{
-				ERR_CHK(rc);
-				return;
-			}
-			rc = strcpy_s(pNewClient->client.hostname, sizeof(pNewClient->client.hostname), pHostname);
-			if(rc != EOK)
-			{
-				ERR_CHK(rc);
-				return;
-			}
-		}
-		else
-		{
-	        pNewClient->client.rssi = rssi;
-		}
+                if ((NULL != pCircuit_id && '\0' != pCircuit_id[0]))
+                {
+                        rc = strcpy_s(pNewClient->client.remote_id, sizeof(pNewClient->client.remote_id), pRemote_id);
+                        if(rc != EOK)
+                        {
+                                ERR_CHK(rc);
+                                goto mutex_cleanup;
+                        }
+                        rc = strcpy_s(pNewClient->client.circuit_id, sizeof(pNewClient->client.circuit_id), pCircuit_id);
+                        if(rc != EOK)
+                        {
+                                ERR_CHK(rc);
+                                goto mutex_cleanup;
+                        }
+                        rc = strcpy_s(pNewClient->client.dhcp_status, sizeof(pNewClient->client.dhcp_status), pDhcp_status);
+                        if(rc != EOK)
+                        {
+                                ERR_CHK(rc);
+                                goto mutex_cleanup;
+                        }
+                        rc = strcpy_s(pNewClient->client.ipv4_addr, sizeof(pNewClient->client.ipv4_addr), pIpv4_addr);
+                        if(rc != EOK)
+                        {
+                                ERR_CHK(rc);
+                                goto mutex_cleanup;
+                        }
+                        rc = strcpy_s(pNewClient->client.hostname, sizeof(pNewClient->client.hostname), pHostname);
+                        if(rc != EOK)
+                        {
+                                ERR_CHK(rc);
+                                goto mutex_cleanup;
+                        }
+                }
+                else
+                {
+                         pNewClient->client.rssi = rssi;
+                }
     }
-    
+    mutex_cleanup:
+        pthread_mutex_unlock(&global_stats_mutex);
+
 }
 
 static int snoop_removeRelayAgentOptions(struct dhcp_packet *packet, unsigned length, int queue_number)
@@ -1237,24 +1249,30 @@ static int snoop_packetHandler(struct nfq_q_handle * myQueue, struct nfgenmsg *m
 
 void updateRssiForClient(char* pRemote_id, int rssi)
 {
-	bool already_in_list = false;
-    struct mylist_head * pos, * q; 
+    bool already_in_list = false;
+    struct mylist_head * pos, * q;
     snooper_priv_client_list * pNewClient;
-    
-    mylist_safe(pos, q, &gSnoop_ClientList.list) 
-	{
+
+    pthread_mutex_lock(&global_stats_mutex);
+    mylist_safe(pos, q, &gSnoop_ClientList.list)
+    {
          pNewClient= mylist_entry(pos, snooper_priv_client_list, list);
          if(!strcasecmp(pNewClient->client.remote_id, pRemote_id)) {
              already_in_list = true;
-			 pNewClient->client.rssi = rssi;
-			 snoop_log();
-         }
+             pNewClient->client.rssi = rssi;
+             break;
     }
-	if (false == already_in_list)	
-	{
-		msg_debug("Client :%s is not present Add to the clientlist\n", pRemote_id);
-		snoop_AddClientListEntry(pRemote_id, NULL, NULL, NULL, NULL, rssi);
-	}
+}
+    pthread_mutex_unlock(&global_stats_mutex);
+    if (false == already_in_list)
+    {
+         msg_debug("Client :%s is not present Add to the clientlist\n", pRemote_id);
+         snoop_AddClientListEntry(pRemote_id, NULL, NULL, NULL, NULL, rssi);
+    }
+    else
+    {
+        snoop_log();
+    }
 }
 
 void *dhcp_snooper_init(void *data)
@@ -1344,4 +1362,3 @@ void *dhcp_snooper_init(void *data)
     nfq_close(nfqHandle);
     exit(0);
 }
-
