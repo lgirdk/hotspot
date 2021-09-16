@@ -74,6 +74,19 @@
 #define N_HOTSPOT_JSON   "/nvram/hotspot.json"
 #define T_HOTSPOT_JSON   "/tmp/hotspot.json"
 
+/** Janson Key string **/
+
+#define J_GRE_PRI_EP_NAME  "gre_primary_endpoint"
+#define J_GRE_SEC_EP_NAME  "gre_sec_endpoint"
+#define J_GRE_ENABLE       "gre_enable"
+#define J_GRE_WRONG_SEC_EP_NAME "gre_secondary_endpoint"
+#define J_GRE_ENT_COUNT    "entries_count"
+#define J_GRE_TUNNEL_NET   "tunnel_network"
+#define J_GRE_VAP_NAME     "vap_name"
+#define J_GRE_DSCP         "gre_dscp"
+#define J_GRE_WAN_VLAN     "wan_vlan"
+#define J_GRE_VAP_ENABLE   "enable"
+
 
 /* Structure for Sync vlan and brdige interface */
 typedef enum {
