@@ -323,7 +323,7 @@ static bool set_validatessid() {
             );   
 
     if( ( ret != CCSP_SUCCESS ) && ( faultParam!=NULL )) { 
-            CcspTraceError((" ssidinfo set bus failed = %s\n"));
+            CcspTraceError((" ssidinfo set bus failed\n"));
             bus_info->freefunc( faultParam );
             if(param_val)
             {
