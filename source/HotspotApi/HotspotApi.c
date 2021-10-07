@@ -605,7 +605,6 @@ pErr setHotspot(void* const network){
                    }
               }
          }
-         PsmSet(PSM_HOTSPOT_ENABLE, "1");
          jansson_store_tunnel_info(pGreTunnelData);
      }
      else{
@@ -714,6 +713,7 @@ int confirmVap(){
      snprintf(Buf, sizeof(Buf), "rm /tmp/hotspot.json");
      sys_execute_cmd(Buf);
 
+     gXfinityEnable ? PsmSet(PSM_HOTSPOT_ENABLE, "1") : PsmSet(PSM_HOTSPOT_ENABLE, "0");
      vapBitMask = 0x00;
      hotspot_sysevent_enable_param();
      firewall_restart();
