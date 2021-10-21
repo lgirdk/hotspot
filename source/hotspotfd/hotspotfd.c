@@ -462,7 +462,7 @@ static unsigned short hotspotfd_checksum(void *pdata, int len)
 /// \return - 0 = ping successful, 1 = ping not OK
 /// 
 ////////////////////////////////////////////////////////////////////////////////
-static int _hotspotfd_ping(char *address)
+static int _hotspotfd_ping(char *address, bool firstAttempt)
 {
     const int val = 255;
     int i, sd;
@@ -496,6 +496,7 @@ printf("------- ping >>\n");
     if (hname) {
         addr_ping.sin_family = hname->h_addrtype;
     } else {
+        CcspTraceError(("%s host NULL netaddr: %08x\n", __FUNCTION__, netaddr));
         return status;
     }
 
@@ -507,7 +508,7 @@ printf("------- ping >>\n");
     sd = socket(PF_INET, SOCK_RAW, proto->p_proto);
     if ( sd < 0 ) {
             perror("socket");
-            msg_debug("%s sd=%d\n", __func__, sd);
+            CcspTraceError(("%s Sock Error sd=%d\n", __func__, sd));
              return STATUS_FAILURE;
           
       }
@@ -520,6 +521,7 @@ printf("------- ping >>\n");
         rc = strcpy_s(ifr.ifr_name, sizeof(ifr.ifr_name), gKeepAliveInterface);
 		if(rc != EOK)
 		{
+                        CcspTraceError(("%s String copy failed\n", __func__));
 			ERR_CHK(rc);
                           /* Coverity Fix CID 151796 RESOURCE_LEAK */
                          close(sd);
@@ -530,18 +532,21 @@ printf("------- ping >>\n");
         
         if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
             perror("Error on SO_BINDTODEVICE");
+            CcspTraceError(("%s Error on SO_BINDTODEVICE..\n", __func__));
             status = STATUS_FAILURE;
             break;
         }
 
         if ( setsockopt(sd, SOL_IP, IP_TTL, &val, sizeof(val)) != 0) {
             perror("Set TTL option");
+            CcspTraceError(("%s Set TTL option failure\n", __func__));
             status = STATUS_FAILURE;
             break;
         }
 
         if ( fcntl(sd, F_SETFL, O_NONBLOCK) != 0 ) {
             perror("Request nonblocking I/O");
+            CcspTraceError(("%s Request nonblocking I/O failure\n", __func__));
             status = STATUS_FAILURE;
             break;
         }
@@ -555,7 +560,10 @@ printf("------- ping >>\n");
 			l_iPingCount++;
 
         for (loop = 0;loop < 10; loop++) {
-            socklen_t len = sizeof(r_addr); 
+            socklen_t len = sizeof(r_addr);
+//icmp echo and response both using same structure, memset before each operation
+ 
+            memset(&pckt, 0, sizeof(pckt));
 
             if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) > 0 ) {
 
@@ -584,13 +592,18 @@ printf("------- ping >>\n");
                     msg_debug("EP address matches ping address\n");
                     status = STATUS_SUCCESS;
                 } else {
+                    CcspTraceError(("EP address does not matches ping address expected: %s received: %s\n", netaddr, pckt.msg[4]));
                     status = STATUS_FAILURE;
                 }
+//For the very first ping, the buffer in recv may not have the response for the tunnel
+//and hence attempt a ping again and check if there is a response for it
 
-                break;
+                if((status == STATUS_SUCCESS) || !firstAttempt)
+                 break;
+                firstAttempt = false;
             }
 
-            bzero(&pckt, sizeof(pckt));
+            memset(&pckt, 0, sizeof(pckt));
             pckt.hdr.type = ICMP_ECHO;
             pckt.hdr.un.echo.id = pid;
 
@@ -601,8 +614,10 @@ printf("------- ping >>\n");
             pckt.hdr.un.echo.sequence = cnt++;
             pckt.hdr.checksum = hotspotfd_checksum(&pckt, sizeof(pckt));
 
-            if ( sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr, sizeof(*addr)) <= 0 )
+            if ( sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr, sizeof(*addr)) <= 0 ) {
                 perror("sendto");
+                CcspTraceError(("sendto error"));
+            }
 
             usleep(300000);
 
@@ -613,11 +628,11 @@ printf("------- ping >>\n");
     close(sd);
     
 /* Coverity Fix CID :124917 PRINTF_ARGS*/
-printf("------- ping %d << status\n",status);
+    CcspTraceInfo(("%s ------- ping %d << status\n", __func__, status));
     return status;
 }
 
-static int hotspotfd_ping(char *address, bool checkClient) {
+static int hotspotfd_ping(char *address, bool checkClient, bool firstAttempt) {
     //zqiu: do not ping WAG if no client attached, and no new client join in
 printf("------------------ %s \n", __func__); 
 #if !defined(_COSA_BCM_MIPS_)
@@ -626,7 +641,7 @@ printf("------------------ %s \n", __func__);
 #else
     UNREFERENCED_PARAMETER(checkClient);
 #endif
-    return  _hotspotfd_ping(address);
+    return  _hotspotfd_ping(address, firstAttempt);
 }
 
 #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_)) 
@@ -1417,6 +1432,8 @@ void hotspot_start()
 	unsigned int timeElapsed;
 	errno_t rc = -1;
         int   ret   = 0; 
+    bool PrimaryFirstAttempt = true;
+    bool SecondaryFirstAttempt = true;
 
     rc = strcpy_s(gKeepAliveInterface, sizeof(gKeepAliveInterface), "erouter0");
 	if(rc != EOK)
@@ -1469,6 +1486,7 @@ void hotspot_start()
     keep_it_alive:
 
     while (gKeepAliveEnable == true) {
+       PrimaryFirstAttempt = true;
 Try_primary:
         while (gPrimaryIsActive && (gKeepAliveEnable == true)) {
 
@@ -1478,7 +1496,8 @@ Try_primary:
                 hotspotfd_log();
             }
 
-            if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
+            if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp, PrimaryFirstAttempt) == STATUS_SUCCESS) {
+                PrimaryFirstAttempt = false;
                 gPrimaryIsActive = true;
                 gSecondaryIsActive = false;
                 gPrimaryIsAlive = true;
@@ -1587,6 +1606,7 @@ Try_primary:
             }
         }
 Try_secondary:
+        SecondaryFirstAttempt = true;
         while (gSecondaryIsActive && (gKeepAliveEnable == true)) {
 
             gKeepAlivesSent++;
@@ -1599,7 +1619,8 @@ Try_secondary:
                    strncpy(gpSecondaryEP, gpPrimaryEP, 40);
             }
 
-            if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
+            if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp, SecondaryFirstAttempt) == STATUS_SUCCESS) {
+                SecondaryFirstAttempt = false;
                 gPrimaryIsActive = false;
                 gSecondaryIsActive = true;
                 gSecondaryIsAlive = true;
@@ -1744,12 +1765,12 @@ Try_secondary:
 		//gTunnelIsUp==false;
 		while (gKeepAliveEnable == true) {
 			gKeepAlivesSent++;
-			if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
+			if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp, true) == STATUS_SUCCESS) {
 				gPrimaryIsActive = true;
                 gSecondaryIsActive = false;
 				goto Try_primary;
 			}
-			if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
+			if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp, true) == STATUS_SUCCESS) {
 				gPrimaryIsActive = false;
                 gSecondaryIsActive = true;
 				goto Try_secondary;
