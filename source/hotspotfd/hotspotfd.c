@@ -592,7 +592,7 @@ printf("------- ping >>\n");
                     msg_debug("EP address matches ping address\n");
                     status = STATUS_SUCCESS;
                 } else {
-                    CcspTraceError(("EP address does not matches ping address expected: %s received: %s\n", netaddr, pckt.msg[4]));
+                    CcspTraceError(("EP address does not matches ping address expected: %08x received: %08x\n", netaddr, pckt.msg[4]));
                     status = STATUS_FAILURE;
                 }
 //For the very first ping, the buffer in recv may not have the response for the tunnel
