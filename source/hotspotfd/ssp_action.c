@@ -207,7 +207,7 @@ ssp_engage
     }
 	else
 	{
-		CcspTraceError(("Hotspot registry to CR failed !!!! with error:%d\n", returnStatus));
+		CcspTraceError(("Hotspot registry to CR failed !!!! with error:%lu\n", returnStatus));
 	}
 
     return ANSC_STATUS_SUCCESS;
