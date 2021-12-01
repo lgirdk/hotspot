@@ -706,7 +706,7 @@ int confirmVap(){
            CcspTraceError(("HOTSPOT_LIB : hotspot.json file not available in tmp  %s \n", __FUNCTION__));
            memset((char *)execRetVal,0,sizeof(Err));
            execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
-           return (int)execRetVal;
+           return (intptr_t)execRetVal;
      }
      memset(Buf, '\0', sizeof(Buf));
 //PRASH: Lock /nvram/hotspot.json before copying 
