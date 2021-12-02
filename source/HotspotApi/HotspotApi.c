@@ -21,6 +21,7 @@
 #include "libHotspotApi.h"
 #include "webconfig_framework.h"
 #include "ccsp_psm_helper.h"
+#include "ansc_platform.h"
 
 /**************************************************************************/
 /*      GLOBAL and STATIC  VARIABLES                                      */
@@ -132,31 +133,31 @@ int gre_sysevent_syscfg_init()
                                                "hotspot_service", &gSysevent_token);
 
     if (gSyseventfd < 0)
-    {   
+    {
          CcspTraceError(("HOTSPOT_LIB : sysevent_open failed in %s \n", __FUNCTION__));
          return 1;
     }
     return 0;
 }
 
-int  update_bridge_config (int index) {
-
+int update_bridge_config(int index) {
     int retVal = 0;
     char rule[1024]={0}, query[500]={0}, param[500]={0};
 
-    CcspTraceInfo(("HOTSPOT_LIB : Entering function %s to set sysevent parameters Index =%d \n", __FUNCTION__, index));
+    CcspTraceInfo(("HOTSPOT_LIB : Entering function %s to set sysevent parameters Index=%d\n",
+        __FUNCTION__, index));
 
-    if( index >= 0) {
+    if (index >= 0) {
         memset(rule,'\0',sizeof(rule));
         memset(query,'\0',sizeof(query));
         memset(param, '\0', sizeof (param));
-        snprintf(rule, sizeof(rule),"-A FORWARD -o %s -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d", 
-                gVlanSyncData[index].bridgeName, index+1 ); 
-                snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
-                sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
-                sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
+        snprintf(rule, sizeof(rule),"-A FORWARD -o %s -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d",
+                gVlanSyncData[index].bridgeName, index+1 );
+        snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
+        sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
+        sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
     } else {
-      CcspTraceError(("HOTSPOT_LIB : %s  Invalid Index =%d \n", __FUNCTION__, index));
+      CcspTraceError(("HOTSPOT_LIB : %s Invalid Index=%d\n", __FUNCTION__, index));
       retVal = -1;
     }
     return retVal;

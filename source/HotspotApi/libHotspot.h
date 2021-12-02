@@ -34,7 +34,6 @@
 #include <sysevent/sysevent.h>
 #include <arpa/inet.h>
 
-#include "ansc_platform.h"
 #include "libHotspotApi.h"
 
 #define GRE_IFNAME        "gretap0"

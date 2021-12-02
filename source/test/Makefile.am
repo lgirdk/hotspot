@@ -26,7 +26,14 @@ AM_CXXFLAGS = -std=c++11
 
 ACLOCAL_AMFLAGS = -I m4
 bin_PROGRAMS = CcspHotspot_gtest.bin
-CcspHotspot_gtest_bin_CPPFLAGS = -I$(PKG_CONFIG_SYSROOT_DIR)$(includedir)/gtest -I${top_srcdir}/gtest/include -I${top_srcdir}/source -I${top_srcdir}/source/include
-CcspHotspot_gtest_bin_SOURCES =  CcspHotspotTest.cpp\
-                                 gtest_main.cpp
+CcspHotspot_gtest_bin_CPPFLAGS = -I$(PKG_CONFIG_SYSROOT_DIR)$(includedir)/gtest \
+                                 -I${top_srcdir}/source \
+                                 -I${top_srcdir}/source/include \
+                                 -I${top_srcdir}/source/util \
+                                 -I${top_srcdir}/source/HotspotApi \
+                                 -I$(PKG_CONFIG_SYSROOT_DIR)$(includedir)/ccsp
+CcspHotspot_gtest_bin_SOURCES = mocks/mock_sysevent.cpp \
+                                CcspHotspotTest.cpp \
+                                gtest_main.cpp
+CcspHotspot_gtest_bin_LDADD = ${top_builddir}/source/HotspotApi/libHotspotApi.la
 CcspHotspot_gtest_bin_LDFLAGS = -lgtest -lgmock -lgcov -lpthread
