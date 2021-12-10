@@ -150,7 +150,8 @@ int  update_bridge_config (int index) {
         memset(rule,'\0',sizeof(rule));
         memset(query,'\0',sizeof(query));
         memset(param, '\0', sizeof (param));
-        snprintf(rule, sizeof(rule),"-A FORWARD -o $br -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d", index+1 ); 
+        snprintf(rule, sizeof(rule),"-A FORWARD -o %s -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d", 
+                gVlanSyncData[index].bridgeName, index+1 ); 
                 snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
                 sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
                 sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
@@ -689,6 +690,9 @@ int confirmVap(){
                 offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
                                 "brctl addif %s %s; ", gVlanSyncData[index].bridgeName, gVlanSyncData[index].vapInterface);
+                offset += snprintf(cmdBuf+offset, 
+                                sizeof(cmdBuf) - offset,
+                                "echo 1 > /sys/class/net/%s/bridge/nf_call_iptables;", gVlanSyncData[index].bridgeName);
 
                 CcspTraceInfo(("HOTSPOT_LIB : Buffer 4 gre confirm vap = %s %d\n", cmdBuf, offset));
                 if (offset)
