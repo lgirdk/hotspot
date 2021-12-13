@@ -471,13 +471,14 @@ static int _hotspotfd_ping(char *address, bool firstAttempt)
     int loop;
     struct hostent *hname;
     struct sockaddr_in addr_ping,*addr;
+   
     struct protoent *proto = NULL;
     int cnt = 1;
     int status = STATUS_FAILURE;
     struct ifreq ifr;
     unsigned netaddr;
     static int l_iPingCount = 0;
-    errno_t rc = -1;
+	errno_t rc = -1;
 
     // This is the number of ping's to send out
     // per keep alive interval
@@ -511,7 +512,7 @@ printf("------- ping >>\n");
              return STATUS_FAILURE;
           
       }
-
+	
     do {
 
         // Bind to a specific interface only 
@@ -565,6 +566,7 @@ printf("------- ping >>\n");
             memset(&pckt, 0, sizeof(pckt));
 
             if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) > 0 ) {
+
                 msg_debug("pckt.hdr.checksum: %d\n", pckt.hdr.checksum);
                 msg_debug("pckt.hdr.code    : %d\n", pckt.hdr.code);
                 msg_debug("pckt.hdr.type    : %d\n", pckt.hdr.type);
@@ -590,20 +592,15 @@ printf("------- ping >>\n");
                     msg_debug("EP address matches ping address\n");
                     status = STATUS_SUCCESS;
                 } else {
-                    CcspTraceInfo(("EP address does not match ping address expected: %08x received: %02x%02x%02x%02x\n", netaddr, pckt.msg[4], pckt.msg[5], pckt.msg[6], pckt.msg[7]));
+                    CcspTraceError(("EP address does not matches ping address expected: %08x received: %08x\n", netaddr, pckt.msg[4]));
                     status = STATUS_FAILURE;
                 }
-
 //For the very first ping, the buffer in recv may not have the response for the tunnel
 //and hence attempt a ping again and check if there is a response for it
-//Check 10 ICMP packets whether they are from the hotspot tunnel endpoint
 
-                if(status == STATUS_SUCCESS)
-                    break;
-                else if(!firstAttempt)
-                    continue;
-                else
-                    firstAttempt = false;
+                if((status == STATUS_SUCCESS) || !firstAttempt)
+                 break;
+                firstAttempt = false;
             }
 
             memset(&pckt, 0, sizeof(pckt));
@@ -624,7 +621,7 @@ printf("------- ping >>\n");
 
             usleep(300000);
 
-        }
+        } 
 
     } while (--keepAliveCount);
 
