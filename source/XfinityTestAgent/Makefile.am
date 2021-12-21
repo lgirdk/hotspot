@@ -16,8 +16,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = arp_solicitation hotspotfd HotspotApi XfinityTestAgent
+bin_PROGRAMS = xfinitytest
 
-if WITH_GTEST_SUPPORT
-SUBDIRS += test
-endif
+AM_CFLAGS = -I$(top_srcdir)/source 
+AM_CFLAGS += -I$(top_srcdir)/source/include 
+AM_CFLAGS += -I$(top_srcdir)/source/util 
+AM_CFLAGS += -I$(top_srcdir)/source/hotspotfd/include
+
+AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -ltelemetry_msgsender -lsecure_wrapper -lprivilege
+xfinitytest_SOURCES = tunnelcheck.c
+

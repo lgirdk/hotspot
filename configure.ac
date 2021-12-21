@@ -68,6 +68,7 @@ PKG_CHECK_MODULES([DBUS],[dbus-1 >= 1.6.18])
 
 AC_CONFIG_FILES(
     source/hotspotfd/Makefile
+    source/XfinityTestAgent/Makefile
     source/arp_solicitation/Makefile
     source/HotspotApi/Makefile
     source/Makefile
