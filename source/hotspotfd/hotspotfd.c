@@ -1046,7 +1046,7 @@ bool deleteSharedMem(int key, bool snooper)
         if (shmid < 0)
             continue;
         if(shmds.shm_segsz > 0 && key == shmds.shm_perm.__key) {
-            CcspTraceError(("Existing shared memory segment %s found! key: %d size:%d. Deleting!\n",shmidchar, shmds.shm_perm.__key, shmds.shm_segsz));
+            CcspTraceError(("Existing shared memory segment %s found! key: %d size:%zu. Deleting!\n",shmidchar, shmds.shm_perm.__key, shmds.shm_segsz));
             if (snooper) {
                 snooper_statistics_s *snStats;
 		        snStats = (snooper_statistics_s *)shmat(shmid, 0, 0);

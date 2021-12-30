@@ -609,7 +609,7 @@ pErr setHotspot(void* const network){
 
          create_tunnel( pGreTunnelData->entries->gre_primary_endpoint); 
 
-         CcspTraceInfo(("HOTSPOT_LIB : Number of VAP received in blob: %d \n", pGreTunnelData->entries->table_param->entries_count));
+         CcspTraceInfo(("HOTSPOT_LIB : Number of VAP received in blob: %zu \n", pGreTunnelData->entries->table_param->entries_count));
 
          for(index = 0; index < pGreTunnelData->entries->table_param->entries_count; index++){
               if(true == pGreTunnelData->entries->table_param->entries[index].enable){

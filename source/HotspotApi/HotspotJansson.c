@@ -116,7 +116,7 @@ bool jansson_rollback_tunnel_info() {
                 json_string_value(jsecEndpoint), SIZE_OF_IP);
     }
     memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
-    CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip secEndIp = %s len of sec = %d \n", secEndIp, strlen(secEndIp)));
+    CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip secEndIp = %s len of sec = %zu \n", secEndIp, strlen(secEndIp)));
 
     if((0 == strcmp(secEndIp, "")) || (0 == strcmp(secEndIp, " ")) || (0 == strcmp(secEndIp, "0.0.0.0"))){
         CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
