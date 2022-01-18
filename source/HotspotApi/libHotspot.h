@@ -102,6 +102,9 @@ typedef struct{
       char         *bridgeName;         //e.g. brlan2
       char         bitVal;
       int          ssidIdx;
+#if defined(_COSA_INTEL_XB3_ARM_)
+      int          instance;
+#endif
 }vlanSyncData_s;
 /**/
 void firewall_restart();

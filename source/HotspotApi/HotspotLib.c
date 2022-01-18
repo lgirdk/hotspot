@@ -49,10 +49,10 @@ vlanSyncData_s gVlanSyncData[] = {
 };
 #elif defined(_COSA_INTEL_XB3_ARM_)
 vlanSyncData_s gVlanSyncData[] = {
-     {VAP_NAME_4, NULL, "brlan2", 0x1, 5},
-     {VAP_NAME_5, NULL, "brlan3", 0x2, 6},
-     {VAP_NAME_8, NULL, "brlan4", 0x4, 9},
-     {VAP_NAME_9, NULL, "brlan5", 0x8, 10}
+     {VAP_NAME_4, NULL, "brlan2", 0x1, 5, 3},
+     {VAP_NAME_5, NULL, "brlan3", 0x2, 6, 4},
+     {VAP_NAME_8, NULL, "brlan4", 0x4, 9, 7},
+     {VAP_NAME_9, NULL, "brlan5", 0x8, 10, 8}
 };
 #elif defined (_CBR_PRODUCT_REQ_)
 vlanSyncData_s gVlanSyncData[] = {
