@@ -203,6 +203,8 @@ int create_tunnel(char *gre_primary_endpoint){
                                sizeof(cmdBuf) - offset,
                                "%s %s txqueuelen 1000 mtu 1500;", IP_SET, GRE_IFNAME);
          #endif
+	 CcspTraceInfo(("HOTSPOT_LIB : Adding gretap0 to the Flowmgr \n"));
+	 offset += snprintf(cmdBuf+offset, sizeof(cmdBuf) - offset,"echo addif %s wan > /proc/driver/flowmgr/cmd;",GRE_IFNAME);
 
          CcspTraceInfo(("HOTSPOT_LIB : ROLLBACK Buffer 1 gre add = %s %d\n", cmdBuf, offset));
          if (offset)
