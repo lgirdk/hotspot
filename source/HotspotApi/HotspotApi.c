@@ -755,6 +755,10 @@ int confirmVap(){
      hotspot_sysevent_enable_param();
      firewall_restart();
      tunnel_param_synchronize();
+/* Adding flag for pandm to avoid sending multiple blobs */
+     memset(Buf, '\0', sizeof(Buf));
+     snprintf(Buf, sizeof(Buf), "touch /tmp/.hotspot_blob_executed");
+     sys_execute_cmd(Buf);
 
      return 0;
 }
