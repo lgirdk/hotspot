@@ -87,6 +87,11 @@
 #define J_GRE_VAP_ENABLE   "enable"
 
 
+#define GRE_PATH "/etc/utopia/service.d/service_multinet/handle_gre.sh > /tmp/.hotspot_path"
+#define GRE_ASYNC_HOT_EP "sysevent async hotspotfd-tunnelEP"  
+#define GRE_EP_ASYNC   "gre_ep_async"
+#define GRE_FILE "/tmp/.hotspot_path"
+
 /* Structure for Sync vlan and brdige interface */
 typedef enum {
       VLAN_INDEX_0 = 0,

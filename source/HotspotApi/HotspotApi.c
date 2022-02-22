@@ -277,6 +277,34 @@ static int deleteVaps(){
       return 0;
 }
 
+static void hotspot_async_reg()
+{
+    char cmdBuff[300] = {0};
+
+    memset(cmdBuff, '\0', sizeof(cmdBuff));
+    CcspTraceInfo(("HOTSPOT_LIB : configuring sysevent async....\n"));
+    snprintf(cmdBuff, sizeof(cmdBuff), "%s %s", GRE_ASYNC_HOT_EP, GRE_PATH);
+    CcspTraceInfo(("HOTSPOT_LIB : sysevent content %s\n", cmdBuff));
+    sys_execute_cmd(cmdBuff);
+
+    memset(cmdBuff, '\0', sizeof(cmdBuff));
+    FILE* file = fopen(GRE_FILE, "r");
+    if(file)
+    {
+        int len=20;
+        char name[30]={0};
+        if (fgets(name, len, file) != NULL)
+        {
+           CcspTraceInfo(("HOTSPOT_LIB : gre ep sync event %s\n", name));
+           sysevent_set(gSyseventfd, gSysevent_token, GRE_EP_ASYNC, name, 0);
+        }
+        if( file!= NULL)
+        {
+           fclose(file);
+        }
+    }
+}
+
 int hotspot_sysevent_enable_param(){
 
     char cmdBuff[100] = {0};
@@ -302,6 +330,10 @@ int hotspot_sysevent_enable_param(){
       sysevent_get(gSyseventfd, gSysevent_token, "hotspot_1-status", 
                                                  hotspotStatus, sizeof(hotspotStatus)); 
     */
+    //TODO: This will be moved to CcspHotspot and new API in library to reverse
+    //the tunnel
+    hotspot_async_reg();
+
     memset(cmdBuff, '\0', sizeof(cmdBuff));
     CcspTraceInfo(("HOTSPOT_LIB : Starting Hotspot...\n"));
     strncpy(cmdBuff, "/usr/bin/CcspHotspot -subsys eRT.", SIZE_CMD);
