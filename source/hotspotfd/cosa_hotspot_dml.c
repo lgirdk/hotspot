@@ -122,7 +122,7 @@ BOOL HotspotConnectedDevice_SetParamStringValue(ANSC_HANDLE hInsContext, char* P
         return FALSE;
     }
     if (strlen(ret) > sizeof(l_cMacAddr)) {
-        CcspTraceError(("Invalid Client MAC address length %d, expected %d\n", strlen(ret), sizeof(l_cMacAddr)));
+        CcspTraceError(("Invalid Client MAC address length %zu, expected %zu\n", strlen(ret), sizeof(l_cMacAddr)));
         return FALSE;
     }
     if(isValidMAC(ret) != 0)
