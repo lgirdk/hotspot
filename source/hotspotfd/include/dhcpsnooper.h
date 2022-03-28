@@ -91,6 +91,11 @@
 #define kSnooper_ssid_index4                 "snooper-ssid4-index"
 #define kSnooper_ssid_index5                 "snooper-ssid5-index"
 
+#ifdef WAN_FAILOVER_SUPPORTED
+#define kcurrent_wan_interface                "current_wan_ifname"
+#define ktest_current_wan_interface           "test_current_wan_ifname"
+#endif
+
 #define kSnooper_circuit_id_len             30
 #define kSnooper_MaxClients                 30
 

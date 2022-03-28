@@ -56,9 +56,13 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <linux/if.h>
-
 #include "ssp_global.h"
 #include "ansc_platform.h"
+
+#ifdef WAN_FAILOVER_SUPPORTED
+#include <rbus.h>
+#include "libHotspotApi.h"
+#endif
 
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
     #include <sysevent/sysevent.h>
@@ -85,7 +89,6 @@
 
 #define kDefault_PrimaryTunnelEP        "172.30.0.1" 
 #define kDefault_SecondaryTunnelEP      "172.40.0.1" 
-
 //#define kDefault_SecondaryMaxTime       300 // max. time allowed on secondary EP in secs.
 #define kDefault_SecondaryMaxTime       43200  //zqiu: according to XWG-CP-15, default time is 12 hours
 
@@ -94,14 +97,18 @@
 #define kMax_InterfaceLength            20
 #define DEBUG_INI_NAME "/etc/debug.ini"
 
+#ifdef WAN_FAILOVER_SUPPORTED
+#define PSM_WAN_INT "dmsb.Mesh.WAN.Interface.Name"
+#endif
+
 extern  ANSC_HANDLE             bus_handle;
 static char ssid_reset_mask = 0x0;
 
 #if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
 #define SSIDVAL 5
-#define PARAM_COUNT 5
+#define PARAM_COUNT_ 5
 #else
-#define PARAM_COUNT 4
+#define PARAM_COUNT_ 4
 #define SSIDVAL 4
 #endif
 struct packet {
@@ -158,6 +165,12 @@ static bool gSecStateIsDown = false;
 static bool gBothDnFirstSignal = false;
 
 static bool gTunnelIsUp = false;
+static bool wanFailover = false; //Always false as long as wan failover does'nt happen
+
+#ifdef WAN_FAILOVER_SUPPORTED
+extern int hotspot_wan_failover(bool isRemoteWANEnabled);
+extern int PsmGet(const char *param, char *value, int size);
+#endif
 
 static pthread_t dhcp_snooper_tid;
 
@@ -212,6 +225,10 @@ typedef enum {
     SNOOPER_CIRCUITENABLE,
     SNOOPER_REMOTEENABLE,
     SNOOPER_MAXCLIENTS,
+#ifdef WAN_FAILOVER_SUPPORTED
+    CURRENT_WAN_IFNAME,
+    TEST_CURRENT_WAN_IFNAME,
+#endif
     HOTSPOTFD_ERROR
 }HotspotfdType;
 
@@ -237,7 +254,13 @@ Hotspotfd_MsgItem hotspotfdMsgArr[] = {
     {"snooper-log-enable",                            SNOOPER_LOGENABLE},
     {"snooper-circuit-enable",                        SNOOPER_CIRCUITENABLE},
     {"snooper-remote-enable",                         SNOOPER_REMOTEENABLE},
-    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS}};
+    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS}
+#ifdef WAN_FAILOVER_SUPPORTED
+    ,
+    {"current_wan_ifname",                            CURRENT_WAN_IFNAME},
+    {"test_current_wan_ifname",                       TEST_CURRENT_WAN_IFNAME}
+#endif
+    };
 
 HotspotfdType Get_HotspotfdType(char * name)
 {
@@ -287,7 +310,7 @@ static bool set_validatessid() {
     int   ret             = 0; 
     int i = 0;
   
-    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * PARAM_COUNT);
+    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * PARAM_COUNT_);
     if (NULL == param_val)
     {  
         CcspTraceError(("Memory allocation failed in hotspot \n"));
@@ -317,7 +340,7 @@ static bool set_validatessid() {
             0,
             0,   
             param_val,
-            PARAM_COUNT,
+            PARAM_COUNT_,
             TRUE,
             &faultParam
             );   
@@ -367,7 +390,7 @@ static bool get_validate_ssid()
             dstComponent,
             dstPath,
             (char**)paramNames,
-            PARAM_COUNT,
+            PARAM_COUNT_,
             &valNum,
             &valStructs);
     
@@ -818,6 +841,48 @@ static bool hotspotfd_isValidIpAddress(char *ipAddress)
     return result != 0;
 }
 
+#ifdef WAN_FAILOVER_SUPPORTED
+static bool hotspot_isRemoteWan(char *wan_interface)
+{
+     char psm_val[128] = {0};
+     int ret = 0;
+
+     PsmGet(PSM_WAN_INT, psm_val, sizeof(psm_val));
+     CcspTraceInfo(("HotspotTunnelEvent : Wan interface psm value %s\n", psm_val));
+ 
+     if ( (strcmp(wan_interface, psm_val) == 0)){
+         wanFailover = true;
+         ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_DOWN");
+         if ( ret != CCSP_SUCCESS )
+         {
+              CcspTraceError(("%s : TunnelStatus down failed in remote wan,  ret value is %d\n",__FUNCTION__ ,ret));
+         }
+         return true;
+     }
+     else{
+         ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_UP");
+         if ( ret != CCSP_SUCCESS )
+         {
+               CcspTraceError(("%s : TunnelStatus up failed in remote wan,  ret value is %d\n",__FUNCTION__ ,ret));
+         }
+         wanFailover = false;
+         return false;
+     }
+}
+
+static bool hotspot_check_wan_failover_status(char *val)
+{
+     char cbuff[20]={0};
+     bool isRemoteWANEnabled = false;
+
+     strncpy(cbuff, val, sizeof(cbuff));
+     CcspTraceInfo(("HotspotTunnelEvent : %s New value of CurrentActiveInterface is -= %s\n",__FUNCTION__, cbuff));
+     isRemoteWANEnabled = hotspot_isRemoteWan(cbuff);
+     hotspot_wan_failover(isRemoteWANEnabled);
+     return true;
+}
+#endif
+
 #ifdef __HAVE_SYSEVENT__
 static void *hotspotfd_sysevent_handler(void *data)
 {
@@ -840,7 +905,11 @@ static void *hotspotfd_sysevent_handler(void *data)
     async_id_t snoop_max_clients_id;
     async_id_t snoop_circuit_ids[kSnoop_MaxCircuitIDs]; 
     async_id_t snoop_ssids_ids[kSnoop_MaxCircuitIDs];
-
+#ifdef WAN_FAILOVER_SUPPORTED
+    async_id_t current_wan_interface_id;
+    async_id_t test_current_wan_interface_id;
+#endif
+  
     int i = 0;
 
     sysevent_setnotification(sysevent_fd, sysevent_token, kHotspotfd_primary,              &hotspotfd_primary_id);
@@ -859,6 +928,10 @@ static void *hotspotfd_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_circuit_enable,  &snoop_circuit_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_remote_enable,   &snoop_remote_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_max_clients,     &snoop_max_clients_id);
+#ifdef WAN_FAILOVER_SUPPORTED
+    sysevent_setnotification(sysevent_fd, sysevent_token, kcurrent_wan_interface,      &current_wan_interface_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, ktest_current_wan_interface, &test_current_wan_interface_id);
+#endif
 
     for(i=0; i<kSnoop_MaxCircuitIDs; i++) 
 	{
@@ -990,8 +1063,12 @@ static void *hotspotfd_sysevent_handler(void *data)
 
                 CcspTraceInfo(("gSnoopMaxNumberOfClients: %u\n", gSnoopMaxNumberOfClients));
 
-            } 
-
+            }
+#ifdef WAN_FAILOVER_SUPPORTED
+            else if (ret_value == CURRENT_WAN_IFNAME || ret_value == TEST_CURRENT_WAN_IFNAME) {
+                 hotspot_check_wan_failover_status(val);
+            }
+#endif
             int strlength;
 
             strlength = strlen(name);
@@ -1455,6 +1532,35 @@ static int hotspotfd_getStartupParameters(void)
 }
 #endif
 
+#ifdef WAN_FAILOVER_SUPPORTED
+
+static void HotspotTunnelEventHandler(
+    rbusHandle_t handle,
+    rbusEvent_t const* event,
+    rbusEventSubscription_t* subscription)
+{
+    (void)handle;
+    (void)subscription;
+    const char* eventName = event->name;
+    rbusValue_t valBuff;
+
+    CcspTraceWarning(("HotspotTunnelEvent : Entering function %s\n", __FUNCTION__));
+    valBuff = rbusObject_GetValue(event->data, NULL );
+    if(!valBuff)
+    {
+        CcspTraceWarning(("HotspotTunnelEvent : FAILED , value is NULL\n"));
+    }
+    else
+    {
+        const char* newValue = rbusValue_GetString(valBuff, NULL);
+        if ( strcmp(eventName,"Device.X_RDK_WanManager.CurrentActiveInterface") == 0 )
+        {
+            CcspTraceWarning(("HotspotTunnelEvent : New value of CurrentActiveInterface is = %s\n",newValue));
+            //hotspot_check_wan_failover_status((char *)newValue);
+        }
+    }
+}
+#endif
 
 void hotspot_start()
 {
@@ -1507,11 +1613,29 @@ void hotspot_start()
     v_secure_system("touch /tmp/hotspotfd_up");
     hotspotfd_log();
 
+#ifdef WAN_FAILOVER_SUPPORTED
+    rbusHandle_t handle;
+
+    ret = rbus_open(&handle, "HotspotTunnelEvent");
+    if(ret != RBUS_ERROR_SUCCESS)
+    {
+        CcspTraceError(("HotspotTunnelEvent : rbus_open failed: %d\n", ret));
+        return;
+    }
+
+    ret = rbusEvent_Subscribe(handle, "Device.X_RDK_WanManager.CurrentActiveInterface", HotspotTunnelEventHandler, NULL, 0);
+    if(ret != RBUS_ERROR_SUCCESS)
+    {
+        CcspTraceError(("HotspotTunnelEvent: rbusEvent_Subscribe failed: %d\n", ret));
+        return;
+    }
+#endif
+
     keep_it_alive:
 
     while (gKeepAliveEnable == true) {
 Try_primary:
-        while (gPrimaryIsActive && (gKeepAliveEnable == true)) {
+        while (gPrimaryIsActive && (gKeepAliveEnable == true) && (wanFailover == false)) {
 
             gKeepAlivesSent++;
 
@@ -1628,7 +1752,7 @@ Try_primary:
             }
         }
 Try_secondary:
-        while (gSecondaryIsActive && (gKeepAliveEnable == true)) {
+        while (gSecondaryIsActive && (gKeepAliveEnable == true) && (wanFailover == false)) {
 
             gKeepAlivesSent++;
 
@@ -1703,7 +1827,7 @@ Try_secondary:
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
                     gWebConfTun = false;
-		    ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "SEC_TUNNEL_UP");
+		    ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_UP");
                     if ( ret != CCSP_SUCCESS )
                     {
                           CcspTraceError(("%s : TunnelStatus send data failed,  ret value is %d\n",__FUNCTION__ ,ret));
@@ -1775,8 +1899,8 @@ Try_secondary:
                         {
                               CcspTraceError(("%s : TunnelStatus send data failed,  ret value is %d\n",__FUNCTION__ ,ret));
                         }
-						gTunnelIsUp=false;
-						break;
+			gTunnelIsUp=false;
+			break;
                     }
                 }
             }

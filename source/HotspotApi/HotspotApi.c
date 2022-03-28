@@ -824,3 +824,98 @@ void register_callbackHotspot(callbackHotspot ptr_reg_callback){
     gCallbackSync = ptr_reg_callback;
 }
 
+static int wanfailover_handleTunnel(bool create)
+{
+
+    char   cmdBuf[1024];
+    int    offset = 0;
+    int    index = 0;
+
+    if(!create) {
+        CcspTraceInfo(("HOTSPOT_LIB : %s Bringing down the Hotspot N/W\n", __FUNCTION__));
+        for(index = 0; index < MAX_VAP; index++){
+            offset = 0;
+            memset(cmdBuf, '\0', sizeof(cmdBuf));
+#if !defined(_COSA_INTEL_XB3_ARM_)
+            offset += snprintf(cmdBuf+offset,
+                                sizeof(cmdBuf) - offset,
+                                "%s %s ; ",
+                                IP_DEL, gVlanSyncData[index].vapInterface);
+#endif
+            offset += snprintf(cmdBuf+offset,
+                                sizeof(cmdBuf) - offset,
+                                "%s %s ; ", IP_DEL, gVlanSyncData[index].bridgeName);
+            offset += snprintf(cmdBuf+offset,
+                                sizeof(cmdBuf) - offset,
+                                "%s %s ;", IP_DEL, GRE_IFNAME);
+            //CcspTraceInfo(("HOTSPOT_LIB : Buffer 3 gre add = %s %d\n", cmdBuf, offset));
+            if (offset)
+                sys_execute_cmd(cmdBuf);
+            CcspTraceInfo(("HOTSPOT_LIB : %s Hotspot bridge %s and ports are down\n", __FUNCTION__, 
+                                gVlanSyncData[index].bridgeName));
+        }
+    } else {
+        //Bringup Interface . Below function will either restore from nvram or from the
+        //tmp hotspot json.
+        CcspTraceInfo(("HOTSPOT_LIB : %s Bringing up the Hotspot N/W\n", __FUNCTION__));
+        jansson_rollback_tunnel_info();
+    }
+    return 0;
+}
+
+
+int hotspot_wan_failover(bool remote_wan_enabled){
+
+    char Buf[200] = {0};
+    char rec[200] = {0};
+    char val[16] = {0};
+
+    //CcspTraceInfo(("HOTSPOT_LIB : Entering %s ....%d\n", __FUNCTION__, remote_wan_enabled));
+
+    if(remote_wan_enabled) {
+
+        //Delete the existing tunnel, Before deleting make sure we have a valid json file
+        //in nvram, if not then we need to prepare the json and store in the /tmp/hotspot_wanfailover.json
+        CcspTraceInfo(("HOTSPOT_LIB : Remote WAN enabled, Bringing down tunnels \n"));
+        if(0 != access(N_HOTSPOT_JSON, F_OK)) {
+             CcspTraceInfo(("HOTSPOT_LIB : %s Preparing backup json for re-creation later\n", __FUNCTION__));
+             //Prepare the json using the psm and prepare the /tmp/hotspot_wanfailover.json
+             //it will create hotspot.json in nvram
+             jansson_store_tunnel_info(NULL);
+
+             memset(Buf, '\0', sizeof(Buf));
+             snprintf(Buf, sizeof(Buf), "cp /nvram/hotspot.json /tmp/hotspot_wanfailover.json");
+             sys_execute_cmd(Buf);
+
+             snprintf(rec, sizeof(rec), "%s",  WEB_CONF_ENABLE);
+             //If webconfig is disabled and if hostpot blob was never sent, remove the unecessary
+             //copy from nvram
+             if((PsmGet(rec, val, sizeof(val)) == 0 && atoi(val) == FALSE) && (0 != access(HOTSPOT_BLOB, F_OK))){
+                CcspTraceInfo(("HOTSPOT_LIB : %s Remove the nvram copy of json\n", __FUNCTION__));
+                memset(Buf, '\0', sizeof(Buf));
+                snprintf(Buf, sizeof(Buf), "rm -rf /nvram/hotspot.json");
+                sys_execute_cmd(Buf);
+             }
+        }
+
+        wanfailover_handleTunnel(false);
+    }
+    else{
+
+        CcspTraceInfo(("HOTSPOT_LIB : Remote WAN disabled, Bringing up tunnels \n"));
+
+        wanfailover_handleTunnel(true);
+        snprintf(rec, sizeof(rec), "%s",  WEB_CONF_ENABLE);
+        //If webconfig enabled and nvram copy of json was missing , take this chance to restore
+        if((0 != access(N_HOTSPOT_JSON, F_OK)) && (PsmGet(rec, val, sizeof(val)) == 0 && atoi(val) == TRUE) && (0 == access(HOTSPOT_BLOB, F_OK))){
+           CcspTraceInfo(("HOTSPOT_LIB :  This may be case of lost nvram, take oppurtunity and restore in nvram\n"));
+           memset(Buf, '\0', sizeof(Buf));
+           snprintf(Buf, sizeof(Buf), "cp /tmp/hotspot_wanfailover.json /nvram/hotspot.json");
+           sys_execute_cmd(Buf);
+        }
+        memset(Buf, '\0', sizeof(Buf));
+        snprintf(Buf, sizeof(Buf), "rm -rf /tmp/hotspot_wanfailover.json");
+        sys_execute_cmd(Buf);
+    }
+    return 0;
+}

@@ -91,5 +91,5 @@ pErr setHotspot( void* const network);
 int deleteHotspot();
 int confirmVap();
 size_t calculateTimeout(size_t numOfEntries);
-
+int hotspot_wan_failover(bool isRemoteWANEnabled);
 #endif

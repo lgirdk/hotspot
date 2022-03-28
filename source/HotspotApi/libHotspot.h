@@ -61,7 +61,9 @@
 #define PSM_PRI_IP             "dmsb.hotspot.tunnel.1.PrimaryRemoteEndpoint"       
 #define PSM_SEC_IP             "dmsb.hotspot.tunnel.1.SecondaryRemoteEndpoint"
 #define PSM_DSCP_MARK          "dmsb.hotspot.gre.1.DSCPMarkPolicy"
-      
+ 
+#define WEB_CONF_ENABLE         "eRT.com.cisco.spvtg.ccsp.webpa.WebConfigRfcEnable"
+     
 #define END_POINT_IP 40
 #if defined (_CBR_PRODUCT_REQ_)
    #define MAX_VAP      5
@@ -70,9 +72,10 @@
 #endif
 #define VAP_NAME     30
 
-#define N_HOTSPOT_JSON   "/nvram/hotspot.json"
-#define T_HOTSPOT_JSON   "/tmp/hotspot.json"
-
+#define N_HOTSPOT_JSON      "/nvram/hotspot.json"
+#define T_HOTSPOT_JSON      "/tmp/hotspot.json"
+#define WAN_FAILOVER_JSON   "/tmp/hotspot_wanfailover.json"
+#define HOTSPOT_BLOB        "/nvram/hotspot_blob"
 /** Janson Key string **/
 
 #define J_GRE_PRI_EP_NAME  "gre_primary_endpoint"

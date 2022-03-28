@@ -87,10 +87,17 @@ bool jansson_rollback_tunnel_info() {
     bool gre_enable = false;
 
 
-    json_t *json_tun_root = json_load_file("/nvram/hotspot.json", 0, NULL);
+    json_t *json_tun_root = json_load_file(N_HOTSPOT_JSON, 0, NULL);
     if (!json_tun_root) {
+        //Next see if this is the case of missing nvram json and if we have prepared the wan 
+        //failover json
+        json_tun_root = json_load_file(WAN_FAILOVER_JSON, 0, NULL);
+        if (!json_tun_root) {
         CcspTraceInfo(("HOTSPOT_LIB : Unable to load hotspot json...%s\n", __FUNCTION__));
         return 1;
+        } else {
+        CcspTraceInfo(("HOTSPOT_LIB : load Wan failover json hotspot json...%s\n", __FUNCTION__));
+        }
     }
 
     checking_recovery_janson(json_tun_root);
@@ -142,7 +149,7 @@ bool jansson_rollback_tunnel_info() {
     }
     CcspTraceInfo(("HOTSPOT_LIB : file load hotspot gre_enable...%d \n", gre_enable));
     if(gre_enable){
-         create_tunnel(priEndIp);
+             create_tunnel(priEndIp);
     }
 
     json_t *json_tun = json_object_get(json_tun_root, J_GRE_TUNNEL_NET);
