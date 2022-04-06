@@ -83,7 +83,7 @@ bool jansson_rollback_tunnel_info() {
     int count = 0;
     int dscp = 0;
     int i = 0;
-    bool gre_enable = FALSE;
+    bool gre_enable = false;
 
 
     json_t *json_tun_root = json_load_file("/nvram/hotspot.json", 0, NULL);
@@ -160,7 +160,7 @@ bool jansson_rollback_tunnel_info() {
              const char *name = json_string_value(jsonVapName);
 
              jsonVapenable = json_array_get(json_vap_enable, i);
-             if( TRUE == json_boolean_value(jsonVapenable)) {
+             if (json_boolean_value(jsonVapenable) == 1) {
                   CcspTraceInfo(("HOTSPOT_LIB : file load EP in array json enable === %s \n", name));
                   vapBitMask |=  gVlanSyncData[i].bitVal;
                   jsonVapID = json_array_get(json_wan_vlan, i);
@@ -184,7 +184,7 @@ bool jansson_rollback_tunnel_info() {
      json_decref(ecount);
      json_decref(json_tun_root);
      CcspTraceInfo(("HOTSPOT_LIB : Exit file load json \n"));
-     return TRUE;
+     return true;
 }
 
 
