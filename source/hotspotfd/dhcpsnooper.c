@@ -51,7 +51,6 @@
 #include "dhcpsnooper.h"
 #include "debug.h"
 #include "dhcp.h"
-#include "ccsp_trace.h"
 #include "ansc_platform.h"
 #include <telemetry_busmessage_sender.h>
 #include "safec_lib_common.h"
