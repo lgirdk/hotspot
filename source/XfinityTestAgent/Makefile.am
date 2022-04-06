@@ -23,6 +23,5 @@ AM_CFLAGS += -I$(top_srcdir)/source/include
 AM_CFLAGS += -I$(top_srcdir)/source/util 
 AM_CFLAGS += -I$(top_srcdir)/source/hotspotfd/include
 
-AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -ltelemetry_msgsender -lsecure_wrapper -lprivilege
+AM_LDFLAGS = -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -ltelemetry_msgsender -lsecure_wrapper -lprivilege
 xfinitytest_SOURCES = tunnelcheck.c
-
