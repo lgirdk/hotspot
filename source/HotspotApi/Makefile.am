@@ -23,6 +23,6 @@ AM_CFLAGS += -I$(top_srcdir)/source/include
 AM_CFLAGS += -I$(top_srcdir)/source/util
 AM_CFLAGS += -DWBCFG_MULTI_COMP_SUPPORT
 
-AM_LDFLAGS =  -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -ljansson
+AM_LDFLAGS = -lpthread -lz -lsysevent -lsyscfg -lulog -llmapi -lnetfilter_queue -lnfnetlink -lccsp_common -ljansson
 
 libHotspotApi_la_SOURCES = libHotspot.h libHotspotApi.h HotspotApi.c HotspotLib.c HotspotJansson.c
