@@ -20,6 +20,7 @@
 
 #include "libHotspot.h"
 #include "libHotspotApi.h"
+#include "ccsp_trace.h"
 #include <jansson.h>
 /**************************************************************************/
 /*      GLOBAL and STATIC  VARIABLES                                      */
