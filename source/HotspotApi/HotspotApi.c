@@ -335,6 +335,11 @@ int hotspot_sysevent_enable_param(){
     hotspot_async_reg();
 
     memset(cmdBuff, '\0', sizeof(cmdBuff));
+    CcspTraceInfo(("HOTSPOT_LIB : Stopping existing Hotspot...\n"));
+    strncpy(cmdBuff, "killall CcspHotspot", SIZE_CMD);
+    sys_execute_cmd(cmdBuff);
+
+    memset(cmdBuff, '\0', sizeof(cmdBuff));
     CcspTraceInfo(("HOTSPOT_LIB : Starting Hotspot...\n"));
     strncpy(cmdBuff, "/usr/bin/CcspHotspot -subsys eRT.", SIZE_CMD);
     sys_execute_cmd(cmdBuff);
@@ -458,6 +463,13 @@ int  validateIpAddress(char *ipAddress){
 
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s function....... \n", __FUNCTION__));
     result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+    if(result == 1){
+         if((0 == strcmp(ipAddress, "255.255.255.255")) ||
+                 (0 == strcmp(ipAddress, "0.0.0.0"))){
+                CcspTraceInfo(("HOTSPOT_LIB :  %s IP is either 0.0.0.0 or 255.255.255.255....... \n", __FUNCTION__));
+                result = 0;
+         }
+    }
     return result;
  
 }
