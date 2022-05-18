@@ -553,7 +553,7 @@ int prepareFirstRollback(){
     }else{
        return ret;    
     }
-//Prash TODO: Find the delta and then store if needed
+//TODO: Find the delta and then store if needed
 }
 
 pErr setHotspot(void* const network){
@@ -567,7 +567,8 @@ pErr setHotspot(void* const network){
      int   status = 0;
      int   file_status = 0;
      char val[16] = {0};
-//PRASH: Check if this is the very first webconfig on this device and if legacy 
+     bool secTunInvalid = false;
+//Check if this is the very first webconfig on this device and if legacy 
 //hotspot was enabled , if so store the previous configuration for the rollback 
 //Check with Wifi team also , if they woudl be able to rollback to previous
 
@@ -633,17 +634,15 @@ pErr setHotspot(void* const network){
          }
          if((validateIpAddress(pGreTunnelData->entries->gre_sec_endpoint) != 1))
          {
-             CcspTraceError(("HOTSPOT_LIB : Invalid Secondary Endpoint IP\n"));
-             execRetVal->ErrorCode = VALIDATION_FALIED;
-             strncpy(execRetVal->ErrorMsg,"Invalid Secondary Endpoint IP",sizeof(execRetVal->ErrorMsg)-1);
-             return execRetVal;
+             CcspTraceInfo(("HOTSPOT_LIB : Invalid Secondary Endpoint IP\n"));
+             secTunInvalid = true;
          }
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
          strncpy(gPriEndptIP, pGreTunnelData->entries->gre_primary_endpoint,SIZE_OF_IP);
          strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
 
-         if((0 == strcmp(gSecEndptIP, "")) || (0 == strcmp(gSecEndptIP, " ")) || (0 == strcmp(gSecEndptIP, "0.0.0.0"))){
+         if(secTunInvalid){
                CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
                strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
          }
@@ -661,7 +660,7 @@ pErr setHotspot(void* const network){
                    vapBitMask |=  gVlanSyncData[index].bitVal;
 
                    vlanid = pGreTunnelData->entries->table_param->entries[index].wan_vlan;
-//PRASH: For now keeping it as 200 similar to AC. but this needs to be tweaked or 
+//For now keeping it as 200 similar to AC. but this needs to be tweaked or 
 //after discussing since l2sd0.xxx may get created in XB3 overlapping the 112,113,1060 vlans
 //for the pods.
                    if(!((vlanid >= 102) && (vlanid <= 4094))){
@@ -670,7 +669,7 @@ pErr setHotspot(void* const network){
                         strncpy(execRetVal->ErrorMsg,"Vlan ID is out of range",sizeof(execRetVal->ErrorMsg)-1);
                         return execRetVal;
                    }
-//PRASH: check for the return , if some bridges fails, we must return failure
+//check for the return , if some bridges fails, we must return failure
 //else wifi will proceed with creating the vap but actually bridges doesnt 
 //exists
                    configHotspotBridgeVlan(pGreTunnelData->entries->table_param->entries[index].vap_name, vlanid);
@@ -696,6 +695,8 @@ pErr setHotspot(void* const network){
          gXfinityEnable = false;
          PsmSet(PSM_HOTSPOT_ENABLE, "0");
          tunnel_param_synchronize();
+         vapBitMask = 0x00;
+         jansson_store_tunnel_info(pGreTunnelData);
      }
     execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
     return execRetVal;
@@ -754,12 +755,13 @@ int confirmVap(){
  
  
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s \n",__FUNCTION__));
-//PRASH: Test if one vap disabled and another enabled through blob works well with the
+//Test if one vap disabled and another enabled through blob works well with the
 //bitmask
 //Hows l2sd0.xxx created for the XB3s ?
 
 #if !defined(_COSA_INTEL_XB3_ARM_)
-    for(index = 0; index < MAX_VAP; index++){
+    if(gXfinityEnable) {
+        for(index = 0; index < MAX_VAP; index++){
             if (gVlanSyncData[index].bitVal & vapBitMask){
 
                 memset(cmdBuf, '\0', sizeof(cmdBuf));
@@ -774,8 +776,9 @@ int confirmVap(){
                 CcspTraceInfo(("HOTSPOT_LIB : Buffer 4 gre confirm vap = %s %d\n", cmdBuf, offset));
                 if (offset)
                    sys_execute_cmd(cmdBuf);
+            }
         }
-    }
+     }
 #endif
      file_status = access(T_HOTSPOT_JSON, F_OK);
 
@@ -786,7 +789,7 @@ int confirmVap(){
            return (intptr_t)execRetVal;
      }
      memset(Buf, '\0', sizeof(Buf));
-//PRASH: Lock /nvram/hotspot.json before copying 
+//Lock /nvram/hotspot.json before copying 
      snprintf(Buf, sizeof(Buf), "cp /tmp/hotspot.json  /nvram/hotspot.json");
      sys_execute_cmd(Buf);
   
@@ -796,9 +799,11 @@ int confirmVap(){
 
      gXfinityEnable ? PsmSet(PSM_HOTSPOT_ENABLE, "1") : PsmSet(PSM_HOTSPOT_ENABLE, "0");
      vapBitMask = 0x00;
-     hotspot_sysevent_enable_param();
-     firewall_restart();
-     tunnel_param_synchronize();
+     if(gXfinityEnable) {
+         hotspot_sysevent_enable_param();
+         firewall_restart();
+         tunnel_param_synchronize();
+     }
 /* Adding flag for pandm to avoid sending multiple blobs */
      memset(Buf, '\0', sizeof(Buf));
      snprintf(Buf, sizeof(Buf), "touch /tmp/.hotspot_blob_executed");
