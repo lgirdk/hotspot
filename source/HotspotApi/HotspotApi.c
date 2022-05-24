@@ -247,7 +247,7 @@ static int deleteVaps(){
      for(index = 0; index < MAX_VAP; index++){
             offset = 0;
             memset(cmdBuf, '\0', sizeof(cmdBuf));
-#if !defined(_COSA_INTEL_XB3_ARM_)
+#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
@@ -703,7 +703,7 @@ pErr setHotspot(void* const network){
 }
 
 int deleteHotspot(){
-#if !defined(_COSA_INTEL_XB3_ARM_)
+#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
      char   cmdBuf[1024];
      int    offset = 0;
      int    index = 0;
@@ -716,7 +716,7 @@ int deleteHotspot(){
       ret = jansson_rollback_tunnel_info();
       if(TRUE == ret){
              CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollback success...\n"));
-#if !defined(_COSA_INTEL_XB3_ARM_)
+#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
              for(index = 0; index < MAX_VAP; index++){
                  if (gVlanSyncData[index].bitVal & vapBitMask){
                       memset(cmdBuf, '\0', sizeof(cmdBuf));
@@ -766,9 +766,11 @@ int confirmVap(){
 
                 memset(cmdBuf, '\0', sizeof(cmdBuf));
                 offset = 0;
+#if !defined(RDK_ONEWIFI)
                 offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
                                 "brctl addif %s %s; ", gVlanSyncData[index].bridgeName, gVlanSyncData[index].vapInterface);
+#endif
                 offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
                                 "echo 1 > /sys/class/net/%s/bridge/nf_call_iptables;", gVlanSyncData[index].bridgeName);
