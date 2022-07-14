@@ -56,6 +56,7 @@
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
 #include <linux/if.h>
+#include <netinet/icmp6.h>
 #include "ssp_global.h"
 #include "ansc_platform.h"
 
@@ -81,6 +82,8 @@
 #include <telemetry_busmessage_sender.h>
 
 #define PACKETSIZE  64
+#define IPv4_HEADER_OFFSET 20
+#define ICMP_ECHO_STRING "ICMP test string"
 #define kDefault_KeepAliveInterval      60 
 #define kDefault_KeepAliveIntervalFailure      300 
 #define kDefault_KeepAliveThreshold     5
@@ -488,47 +491,57 @@ static unsigned short hotspotfd_checksum(void *pdata, int len)
 static int _hotspotfd_ping(char *address)
 {
     const int val = 255;
-    int i, sd;
+    int sd;
     struct packet pckt;
-    struct sockaddr_in r_addr;
+    struct sockaddr_storage r_addr;
     int loop;
     struct hostent *hname;
-    struct sockaddr_in addr_ping,*addr;
+    struct sockaddr_in addr_ping_4;
+    struct sockaddr_in6 addr_ping_6;
+    unsigned char addr_type = AF_INET;
     struct protoent *proto = NULL;
     int cnt = 1;
     int status = STATUS_FAILURE;
     struct ifreq ifr;
-    unsigned netaddr;
     static int l_iPingCount = 0;
     errno_t rc = -1;
-    char rcvd_addr[INET_ADDRSTRLEN] = {0};
     bool firstAttempt;
+
+    //Determination of IP addr family
+    unsigned char buf[sizeof(struct in6_addr)];
+    int result = inet_pton(AF_INET6, address, buf);
+    addr_type = (result == 1) ? AF_INET6 : AF_INET;
+
     // This is the number of ping's to send out
     // per keep alive interval
     unsigned keepAliveCount = gKeepAliveCount;
 printf("------- ping >>\n");
      /*Coverity Fix CID 63000 unused value */
      int pid = getpid();
-    proto = getprotobyname("ICMP");
-    hname = gethostbyname(address);
-    bzero(&addr_ping, sizeof(addr_ping));
-
-    netaddr = inet_addr(address);
-    msg_debug("netaddr: %08x\n", netaddr);
+     proto = getprotobyname((addr_type == AF_INET6) ? "IPv6-ICMP" : "ICMP");
+     hname = gethostbyname2(address, addr_type);
+     bzero(&addr_ping_4, sizeof(addr_ping_4));
+     bzero(&addr_ping_6, sizeof(addr_ping_6));
 
     if (hname) {
-        addr_ping.sin_family = hname->h_addrtype;
+        addr_ping_6.sin6_family = addr_ping_4.sin_family = hname->h_addrtype;
     } else {
-        CcspTraceError(("%s host NULL netaddr: %08x\n", __FUNCTION__, netaddr));
+        CcspTraceError(("%s host NULL netaddr\n", __FUNCTION__));
         return status;
     }
 
-    addr_ping.sin_port = 0;
-    addr_ping.sin_addr.s_addr = *(long*)hname->h_addr;
+    addr_ping_6.sin6_port = addr_ping_4.sin_port = 0;
+    if(addr_type == AF_INET6) {
+        result = inet_pton(AF_INET6, address, &addr_ping_6.sin6_addr);
+        if(result == 0) {
+            CcspTraceError(("%s inet_pton error\n", __func__));
+            return status;
+        }
+    } else {
+        addr_ping_4.sin_addr.s_addr = *(long*)hname->h_addr;
+    }
 
-    addr = &addr_ping;
-
-    sd = socket(PF_INET, SOCK_RAW, proto->p_proto);
+    sd = socket(addr_type, SOCK_RAW, proto->p_proto);
     if ( sd < 0 ) {
             perror("socket");
             CcspTraceError(("%s Sock Error sd=%d\n", __func__, sd));
@@ -559,7 +572,7 @@ printf("------- ping >>\n");
             break;
         }
 
-        if ( setsockopt(sd, SOL_IP, IP_TTL, &val, sizeof(val)) != 0) {
+        if ( setsockopt(sd, (addr_type == AF_INET6) ? IPPROTO_IPV6 : IPPROTO_IP, IP_TTL, &val, sizeof(val)) != 0) {
             perror("Set TTL option");
             CcspTraceError(("%s Set TTL option failure\n", __func__));
             status = STATUS_FAILURE;
@@ -587,7 +600,6 @@ printf("------- ping >>\n");
 //icmp echo and response both using same structure, memset before each operation
  
             memset(&pckt, 0, sizeof(pckt));
-            memset(&rcvd_addr, 0, sizeof(rcvd_addr));
 
             if ( recvfrom(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, &len) > 0 ) {
                 msg_debug("pckt.hdr.checksum: %d\n", pckt.hdr.checksum);
@@ -611,13 +623,12 @@ printf("------- ping >>\n");
                 }
                 printf("\n");
 #endif
-                if (!memcmp(&pckt.msg[4], &netaddr, sizeof(netaddr))) {
-                    msg_debug("EP address matches ping address\n");
+                if (!strncmp((char *)&pckt.msg[(addr_type == AF_INET6) ? 0 : IPv4_HEADER_OFFSET],
+                                ICMP_ECHO_STRING, sizeof(ICMP_ECHO_STRING))) {
+                    msg_debug("Echo strings matches\n");
                     status = STATUS_SUCCESS;
                 } else {
-                    inet_ntop(AF_INET, &pckt.msg[4], rcvd_addr, INET_ADDRSTRLEN);
-                    CcspTraceInfo(("EP address didn't match ping address expected:%s received:%s\n",
-                                     address, rcvd_addr));
+                    CcspTraceInfo(("Echo strings didn't matches\n"));
                     status = STATUS_FAILURE;
                 }
 
@@ -634,17 +645,16 @@ printf("------- ping >>\n");
             }
 
             memset(&pckt, 0, sizeof(pckt));
-            pckt.hdr.type = ICMP_ECHO;
+            pckt.hdr.type = (addr_type == AF_INET6) ? ICMP6_ECHO_REQUEST : ICMP_ECHO;
             pckt.hdr.un.echo.id = pid;
 
-            for ( i = 0; i < sizeof(pckt.msg)-1; i++ )
-                pckt.msg[i] = i+'0';
+            strcpy((char *)&pckt.msg, ICMP_ECHO_STRING);
 
-            pckt.msg[i] = 0;
             pckt.hdr.un.echo.sequence = cnt++;
             pckt.hdr.checksum = hotspotfd_checksum(&pckt, sizeof(pckt));
 
-            if ( sendto(sd, &pckt, sizeof(pckt), 0, (struct sockaddr*)addr, sizeof(*addr)) <= 0 ) {
+            if ( sendto(sd, &pckt, sizeof(pckt), 0, (addr_type == AF_INET6) ? (struct sockaddr*)&addr_ping_6 : (struct sockaddr*)&addr_ping_4,
+                        (addr_type == AF_INET6) ? sizeof(addr_ping_6) : sizeof(addr_ping_4)) <= 0 ) {
                 perror("sendto");
                 CcspTraceError(("sendto error"));
             }
@@ -836,8 +846,8 @@ static void hotspotfd_log(void)
 
 static bool hotspotfd_isValidIpAddress(char *ipAddress)
 {
-    struct sockaddr_in sa;
-    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+    unsigned char buf[sizeof(struct in6_addr)];
+    int result = inet_pton(AF_INET, ipAddress, buf) | inet_pton(AF_INET6, ipAddress, buf);
     return result != 0;
 }
 
