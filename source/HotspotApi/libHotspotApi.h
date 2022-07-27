@@ -80,6 +80,7 @@ typedef struct {
     char         set_primary_endpoint[40];
     char         set_sec_endpoint[40];
     bool         set_gre_enable;
+    int          vlan_id_list[5];
 } tunnelSet_t;
 
 typedef void (*callbackHotspot)(tunnelSet_t *tunnelSet);	

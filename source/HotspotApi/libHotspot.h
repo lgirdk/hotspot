@@ -125,6 +125,7 @@ int getHotspotVapIndex(char *vapName);
 int create_tunnel(char *gre_primary_endpoint);
 int hotspot_sysevent_enable_param();
 bool get_ssid_enable(int ssidIdx);
+bool prevalidateHotspotBlob(tunneldoc_t *pGreTunnelData);
 int  validateIpAddress(char *ipAddress);
 int prepareFirstRollback();
 #endif

@@ -34,6 +34,7 @@ char     vapBitMask = 0x00;
 char     gPriEndptIP[32] = {0};
 char     gSecEndptIP[32] = {0};
 bool     gXfinityEnable = false;
+int      vlanIdList[MAX_VAP];
 
 static pErr execRetVal = NULL;
 extern vlanSyncData_s gVlanSyncData[];
@@ -46,7 +47,7 @@ callbackHotspot gCallbackSync = NULL;
 
 
 bool tunnel_param_synchronize() {
-
+    int itr;
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s....\n", __FUNCTION__));
     tunnelSet_t *tunnelSet = NULL;
 
@@ -60,6 +61,10 @@ bool tunnel_param_synchronize() {
     strncpy(tunnelSet->set_primary_endpoint, gPriEndptIP, SIZE_OF_IP);
     strncpy(tunnelSet->set_sec_endpoint, gSecEndptIP, SIZE_OF_IP);
     tunnelSet->set_gre_enable = gXfinityEnable;
+    for(itr=0; itr<MAX_VAP; itr++)
+    {
+        tunnelSet->vlan_id_list[itr] = vlanIdList[itr];
+    }
     if(gCallbackSync != NULL)
     {
       gCallbackSync(tunnelSet);
@@ -556,6 +561,46 @@ int prepareFirstRollback(){
 //TODO: Find the delta and then store if needed
 }
 
+bool prevalidateHotspotBlob(tunneldoc_t *pGreTunnelData)
+{
+    int index = 0;
+    int vlanid = 0;
+    if((validateIpAddress(pGreTunnelData->entries->gre_primary_endpoint) != 1))
+    {
+        CcspTraceError(("HOTSPOT_LIB : Invalid Primary Endpoint IP\n"));
+        execRetVal->ErrorCode = VALIDATION_FALIED;
+        strncpy(execRetVal->ErrorMsg,"Invalid Primary Endpoint IP",sizeof(execRetVal->ErrorMsg)-1);
+        return false;
+    }
+    if(pGreTunnelData->entries->table_param->entries_count > MAX_VAP)
+    {
+        CcspTraceError(("HOTSPOT_LIB : Invalid VAP count\n"));
+        execRetVal->ErrorCode = VALIDATION_FALIED;
+        strncpy(execRetVal->ErrorMsg,"Invalid VAP count",sizeof(execRetVal->ErrorMsg)-1);
+        return false;
+    }
+    for(index = 0; index < pGreTunnelData->entries->table_param->entries_count; index++)
+    {
+        vlanid = pGreTunnelData->entries->table_param->entries[index].wan_vlan;
+        if(!((vlanid >= 102) && (vlanid <= 4094)))
+        {
+            CcspTraceError(("HOTSPOT_LIB : Vlan ID is out of range for index %d\n", index));
+            execRetVal->ErrorCode = VALIDATION_FALIED;
+            strncpy(execRetVal->ErrorMsg,"Vlan ID is out of range",sizeof(execRetVal->ErrorMsg)-1);
+            return false;
+        }
+        if(getHotspotVapIndex(pGreTunnelData->entries->table_param->entries[index].vap_name) == -1)
+        {
+            CcspTraceError(("HOTSPOT_LIB : Vap Name incorrect for index %d\n ", index));
+            execRetVal->ErrorCode = VALIDATION_FALIED;
+            strncpy(execRetVal->ErrorMsg,"Incorrect VAP name",sizeof(execRetVal->ErrorMsg)-1);
+            return false;
+        }
+    }
+    CcspTraceInfo(("HOTSPOT_LIB : Pre-validation done successfully\n"));
+    return true;
+}
+
 pErr setHotspot(void* const network){
 
      //greTunnelData_s *pGreTunnelData = NULL;
@@ -625,11 +670,9 @@ pErr setHotspot(void* const network){
                    return execRetVal;
              }
          }
-         if((validateIpAddress(pGreTunnelData->entries->gre_primary_endpoint) != 1))
+         if(!prevalidateHotspotBlob(pGreTunnelData))
          {
-             CcspTraceError(("HOTSPOT_LIB : Invalid Primary Endpoint IP\n"));
-             execRetVal->ErrorCode = VALIDATION_FALIED;
-             strncpy(execRetVal->ErrorMsg,"Invalid Primary Endpoint IP",sizeof(execRetVal->ErrorMsg)-1);
+             CcspTraceError(("HOTSPOT_LIB : Invalid Blob. Not applying the new settings.\n"));
              return execRetVal;
          }
          if((validateIpAddress(pGreTunnelData->entries->gre_sec_endpoint) != 1))
@@ -640,11 +683,14 @@ pErr setHotspot(void* const network){
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
          strncpy(gPriEndptIP, pGreTunnelData->entries->gre_primary_endpoint,SIZE_OF_IP);
-         strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
-
-         if(secTunInvalid){
-               CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
-               strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
+         if(secTunInvalid)
+         {
+             CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
+             strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
+         }
+         else
+         {
+             strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
          }
          gXfinityEnable = true;
          /* Deleting existing Tunnels*/
@@ -653,6 +699,7 @@ pErr setHotspot(void* const network){
          create_tunnel( pGreTunnelData->entries->gre_primary_endpoint); 
 
          CcspTraceInfo(("HOTSPOT_LIB : Number of VAP received in blob: %zu \n", pGreTunnelData->entries->table_param->entries_count));
+         memset(vlanIdList, '\0', sizeof(vlanIdList));
 
          for(index = 0; index < pGreTunnelData->entries->table_param->entries_count; index++){
               if(true == pGreTunnelData->entries->table_param->entries[index].enable){
@@ -663,23 +710,12 @@ pErr setHotspot(void* const network){
 //For now keeping it as 200 similar to AC. but this needs to be tweaked or 
 //after discussing since l2sd0.xxx may get created in XB3 overlapping the 112,113,1060 vlans
 //for the pods.
-                   if(!((vlanid >= 102) && (vlanid <= 4094))){
-                        CcspTraceError(("HOTSPOT_LIB : Vlan ID is out of range \n "));
-                        execRetVal->ErrorCode = VALIDATION_FALIED;
-                        strncpy(execRetVal->ErrorMsg,"Vlan ID is out of range",sizeof(execRetVal->ErrorMsg)-1);
-                        return execRetVal;
-                   }
 //check for the return , if some bridges fails, we must return failure
 //else wifi will proceed with creating the vap but actually bridges doesnt 
 //exists
+                   vlanIdList[index] = vlanid;
                    configHotspotBridgeVlan(pGreTunnelData->entries->table_param->entries[index].vap_name, vlanid);
                    retValue = update_bridge_config( getHotspotVapIndex(pGreTunnelData->entries->table_param->entries[index].vap_name));
-                   if(-1 == retValue){
-                        CcspTraceError(("HOTSPOT_LIB : Vap Name incorrect \n "));
-                        execRetVal->ErrorCode = VALIDATION_FALIED;
-                        strncpy(execRetVal->ErrorMsg,"Incorrect VAP name",sizeof(execRetVal->ErrorMsg)-1);
-                        return execRetVal;
-                   }
               }
          }
          jansson_store_tunnel_info(pGreTunnelData);
@@ -688,6 +724,7 @@ pErr setHotspot(void* const network){
          CcspTraceInfo(("HOTSPOT_LIB : Gre is not enabled. Deleting tunnel info \n"));
          deleteVaps();
          hotspot_sysevent_disable_param();
+         memset(vlanIdList, '\0', sizeof(vlanIdList));
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
          strncpy(gPriEndptIP, "0.0.0.0", SIZE_OF_IP);
