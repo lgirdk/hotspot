@@ -114,6 +114,9 @@ static char ssid_reset_mask = 0x0;
 #define PARAM_COUNT_ 4
 #define SSIDVAL 4
 #endif
+#ifdef WIFI_HAL_VERSION_3
+#define RADIOVAL 2
+#endif
 struct packet {
     struct icmphdr hdr;
     char msg[PACKETSIZE-sizeof(struct icmphdr)];
@@ -393,6 +396,11 @@ static bool set_validatessid() {
     char* faultParam      = NULL;
     int   ret             = 0; 
     int i = 0;
+#ifdef WIFI_HAL_VERSION_3
+    const char radio1[]="Device.WiFi.Radio.1.X_CISCO_COM_ApplySetting";
+    const char radio2[]="Device.WiFi.Radio.2.X_CISCO_COM_ApplySetting";
+    const char *paramNamesRadio[]={radio1,radio2};
+#endif
   
     param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * PARAM_COUNT_);
     if (NULL == param_val)
@@ -444,6 +452,50 @@ static bool set_validatessid() {
         free(param_val);
         param_val = NULL;
     }
+#ifdef WIFI_HAL_VERSION_3
+    //Applying Radio settings
+    param_val = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t) * RADIOVAL);
+    if(param_val == NULL)
+    {
+        CcspTraceError(("Memory allocation failed for Radio Param in hotspot \n"));
+        return FALSE;
+    }
+
+    for(i = 0; i < RADIOVAL; i++)
+    {
+        param_val[i].parameterName = (char*)paramNamesRadio[i];
+        param_val[i].parameterValue = AnscCloneString("true");
+        param_val[i].type = ccsp_boolean;
+    }
+    ret = CcspBaseIf_setParameterValues(
+            bus_handle,
+            component,
+            dstPath,
+            0,
+            0,
+            param_val,
+            RADIOVAL,
+            TRUE,
+            &faultParam
+            );
+
+    if( ( ret != CCSP_SUCCESS ) && ( faultParam != NULL)) {
+            CcspTraceError(("radioinfo bus failed \n"));
+            bus_info->freefunc(faultParam);
+            if(param_val)
+            {
+                 free(param_val);
+                 param_val = NULL;
+            }
+            return FALSE;
+    }
+
+    if(param_val)
+    {
+            free(param_val);
+            param_val = NULL;
+    }
+#endif
     ssid_reset_mask = 0;
     return TRUE;
 }
