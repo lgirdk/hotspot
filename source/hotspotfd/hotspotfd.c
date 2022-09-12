@@ -168,6 +168,7 @@ static bool gSecStateIsDown = false;
 static bool gBothDnFirstSignal = false;
 
 static bool gTunnelIsUp = false;
+static bool gVapIsUp = true;
 static bool wanFailover = false; //Always false as long as wan failover does'nt happen
 
 #ifdef WAN_FAILOVER_SUPPORTED
@@ -291,6 +292,86 @@ HotspotfdType Get_HotspotfdType(char * name)
     }
 
     return HOTSPOTFD_ERROR;
+}
+
+static bool set_tunnelstatus(char* status) {
+
+    CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
+    parameterValStruct_t  *param_val = NULL;
+    char  component[256]  = "eRT.com.cisco.spvtg.ccsp.pam";
+    char dstPath[64]="/com/cisco/spvtg/ccsp/pam";
+    const char tunparam[]="Device.X_COMCAST-COM_GRE.Tunnel.1.TunnelStatus";
+    char* faultParam      = NULL;
+    int   ret             = 0;
+
+    param_val  = (parameterValStruct_t*)malloc(sizeof(parameterValStruct_t));
+    if (NULL == param_val)
+    {
+        CcspTraceError(("Memory allocation failed in hotspot \n"));
+        return FALSE;
+    }
+
+    param_val->parameterName = (char*)tunparam;
+    param_val->parameterValue=AnscCloneString(status);
+    CcspTraceInfo(("Setting tunnel status to %s\n", status));
+    param_val->type = ccsp_string;
+
+    ret = CcspBaseIf_setParameterValues(
+            bus_handle,
+            component,
+            dstPath,
+            0,
+            0,
+            param_val,
+            1,
+            TRUE,
+            &faultParam
+            );
+
+    if( ( ret != CCSP_SUCCESS ) && ( faultParam!=NULL )) {
+            CcspTraceError(("TunnelStatus set bus failed\n"));
+            bus_info->freefunc( faultParam );
+            if(param_val)
+            {
+                 free(param_val);
+                 param_val = NULL;
+            }
+            return FALSE;
+    }
+    if(param_val)
+    {
+        free(param_val);
+        param_val = NULL;
+    }
+    return TRUE;
+}
+
+static void notify_tunnel_status(char *status)
+{
+    int ret;
+    if(set_tunnelstatus(status))
+    {
+        CcspTraceInfo(("TunnelStatus set to %s in TR181\n", status));
+    }
+    else
+    {
+        CcspTraceError(("Error setting TunnelStatus in TR181 Data Model\n"));
+    }
+    ret = CcspBaseIf_SendSignal_WithData(bus_handle,
+                                         "Device.X_COMCAST-COM_GRE.Tunnel.1.TunnelStatus", status);
+    if ( ret != CCSP_SUCCESS )
+    {
+        CcspTraceError(("%s : TunnelStatus send rbus data failed,  ret value is %d\n",
+                                                                               __FUNCTION__ ,ret));
+    }
+    if(strcmp("Down",status) == 0)
+    {
+        gVapIsUp = false;
+    }
+    else if(strcmp("Up",status) == 0)
+    {
+        gVapIsUp = true;
+    }
 }
 
 static bool set_validatessid() {
@@ -1690,6 +1771,7 @@ Try_primary:
 
                         CcspTraceError(("sysevent set %s failed on primary\n", kHotspotfd_tunnelEP));
                     }
+                    notify_tunnel_status("Up");
                     if (false == gWebConfTun){ 
 		        ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_UP");
                         if ( ret != CCSP_SUCCESS )
@@ -1724,7 +1806,7 @@ Try_primary:
 
                 if (keepAliveThreshold < gKeepAliveThreshold) {
 					if (gKeepAliveEnable == false) continue;
-					hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case				
+					hotspotfd_sleep(((gTunnelIsUp||gbFirstPrimarySignal)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                     continue;
                 } else {
                     gPrimaryIsActive = false;
@@ -1756,6 +1838,7 @@ Try_primary:
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
 						gTunnelIsUp=false;
+                        notify_tunnel_status("Down");
                     }
                     time(&secondaryEndPointstartTime);  
                 }
@@ -1836,6 +1919,7 @@ Try_secondary:
 
                         CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP)); 
                     }
+                    notify_tunnel_status("Up");
                     gWebConfTun = false;
 		    ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_UP");
                     if ( ret != CCSP_SUCCESS )
@@ -1885,7 +1969,7 @@ Try_secondary:
                 //if (gKeepAliveEnable == false) continue;
                 if (keepAliveThreshold < gKeepAliveThreshold) {
 					if (gKeepAliveEnable == false) continue;
-					hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
+					hotspotfd_sleep(((gTunnelIsUp||gbFirstSecondarySignal)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                     continue;
                 } else {
                     gPrimaryIsActive = true;
@@ -1904,6 +1988,7 @@ Try_secondary:
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
 			/*Signal wifi module for tunnel down */
+                        notify_tunnel_status("Down");
 			ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus", "TUNNEL_DOWN");
                         if ( ret != CCSP_SUCCESS )
                         {
@@ -1928,6 +2013,10 @@ Try_secondary:
                 gPrimaryIsActive = false;
                 gSecondaryIsActive = true;
                 goto Try_secondary;
+            }
+            if(gVapIsUp)
+            {
+                notify_tunnel_status("Down");
             }
             hotspotfd_sleep((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure, false);
         }
