@@ -1663,7 +1663,7 @@ void hotspot_start()
         int   ret   = 0; 
 
 	gKeepAliveEnable = true;
-
+    bool switchedFromSecondary = false;
 #ifdef __HAVE_SYSEVENT__
     sysevent_fd = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, kHotspotfd_events, &sysevent_token);
 	sysevent_fd_gs = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, "hotspotfd-gs", &sysevent_token_gs);
@@ -1788,7 +1788,12 @@ Try_primary:
                     pthread_mutex_lock(&keep_alive_mutex);
                     gbFirstPrimarySignal = false;
                     pthread_mutex_unlock(&keep_alive_mutex);
-		    CcspTraceInfo(("Primary GRE flag set to %d\n", gbFirstPrimarySignal));				
+                    CcspTraceInfo(("Primary GRE flag set to %d\n", gbFirstPrimarySignal));
+                    if(switchedFromSecondary)
+                    {
+                        gSwitchedBackToPrimary++;
+                        switchedFromSecondary = false;
+                    }
                 }
 
 				if (gKeepAliveEnable == false) continue;
@@ -1899,7 +1904,7 @@ Try_secondary:
                     // to the primary? What if the Primary is down then we switched
                     // for no reason?
                     // TODO: Need to try the Primary once before switching.
-                    gSwitchedBackToPrimary++;
+                    switchedFromSecondary = true;
                     break;
                 }
                 if(ssid_reset_mask != 0) {
@@ -2012,6 +2017,7 @@ Try_secondary:
             if (hotspotfd_ping(gpSecondaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
                 gPrimaryIsActive = false;
                 gSecondaryIsActive = true;
+                time(&secondaryEndPointstartTime);
                 goto Try_secondary;
             }
             if(gVapIsUp)
