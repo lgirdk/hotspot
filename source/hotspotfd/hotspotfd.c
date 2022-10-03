@@ -806,15 +806,17 @@ printf("------- ping >>\n");
 }
 
 static int hotspotfd_ping(char *address, bool checkClient) {
+    static int prevPingStatus = STATUS_FAILURE;
     //zqiu: do not ping WAG if no client attached, and no new client join in
 printf("------------------ %s \n", __func__); 
 #if !defined(_COSA_BCM_MIPS_)
-    if(checkClient && !hotspotfd_isClientAttached( NULL) )
+    if((prevPingStatus == STATUS_SUCCESS) && checkClient && !hotspotfd_isClientAttached(NULL))
         return  STATUS_SUCCESS;
 #else
     UNREFERENCED_PARAMETER(checkClient);
 #endif
-    return  _hotspotfd_ping(address);
+    prevPingStatus =  _hotspotfd_ping(address);
+    return  prevPingStatus;
 }
 
 #if (defined (_COSA_BCM_ARM_) && !defined(_XB6_PRODUCT_REQ_)) 
@@ -2021,6 +2023,7 @@ Try_secondary:
                 pthread_mutex_unlock(&keep_alive_mutex);
 
                 keepAliveThreshold++;
+                CcspTraceInfo(("Secondary keepAliveThreshold value %d \n", keepAliveThreshold));
 				//if (gKeepAliveEnable == false) continue;
 				//hotspotfd_sleep(((gTunnelIsUp)?gKeepAliveInterval:gKeepAliveIntervalFailure), false); //Tunnel not Alive case
                 //if (gKeepAliveEnable == false) continue;
