@@ -143,6 +143,7 @@ static unsigned int gKeepAlivePolicy = kDefault_KeepAlivePolicy;
 static bool gKeepAliveEnable = false;
 static bool gKeepAliveLogEnable = true;
 static unsigned int gKeepAliveCount = kDefault_KeepAliveCount;
+static int prevPingStatus = STATUS_FAILURE;
 
 #ifdef __HAVE_SYSEVENT__
 static int sysevent_fd;
@@ -226,6 +227,7 @@ typedef enum {
     HOTSPOTFD_COUNT,
     HOTSPOTFD_LOGENABLE,
     HOTSPOTFD_DEADINTERVAL,
+    HOTSPOTFD_WANSTATUS,
     SNOOPER_ENABLE,
     SNOOPER_DEBUGENABLE,
     SNOOPER_LOGENABLE,
@@ -256,6 +258,7 @@ Hotspotfd_MsgItem hotspotfdMsgArr[] = {
     {"hotspotfd-count",                               HOTSPOTFD_COUNT},
     {"hotspotfd-log-enable",                          HOTSPOTFD_LOGENABLE},
     {"hotspotfd-dead-interval",                       HOTSPOTFD_DEADINTERVAL},
+    {"wan-status",                                    HOTSPOTFD_WANSTATUS},
     {"snooper-enable",                                SNOOPER_ENABLE},
     {"snooper-debug-enable",                          SNOOPER_DEBUGENABLE},
     {"snooper-log-enable",                            SNOOPER_LOGENABLE},
@@ -806,7 +809,6 @@ printf("------- ping >>\n");
 }
 
 static int hotspotfd_ping(char *address, bool checkClient) {
-    static int prevPingStatus = STATUS_FAILURE;
     //zqiu: do not ping WAG if no client attached, and no new client join in
 printf("------------------ %s \n", __func__); 
 #if !defined(_COSA_BCM_MIPS_)
@@ -1041,6 +1043,7 @@ static void *hotspotfd_sysevent_handler(void *data)
     async_id_t hotspotfd_enable_id;
     async_id_t hotspotfd_log_enable_id;
     async_id_t hotspotfd_keep_alive_count_id;
+    async_id_t hotspotfd_wan_status_id;
     
 	async_id_t snoop_enable_id;
     async_id_t snoop_debug_enable_id;
@@ -1066,6 +1069,7 @@ static void *hotspotfd_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_enable,               &hotspotfd_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_log_enable,           &hotspotfd_log_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_keep_alive_count,     &hotspotfd_keep_alive_count_id);
+    sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_wan_status,           &hotspotfd_wan_status_id);
 
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_enable,          &snoop_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_debug_enable,    &snoop_debug_enable_id);
@@ -1177,6 +1181,10 @@ static void *hotspotfd_sysevent_handler(void *data)
                 gDeadInterval = atoi(val);
 
                 msg_debug("gDeadInterval: %u\n", gDeadInterval);
+            } else if (ret_value == HOTSPOTFD_WANSTATUS) {
+                prevPingStatus = STATUS_FAILURE;
+
+                CcspTraceInfo(("wan-status is changed to %s \n", val));
             }
             else if (ret_value == SNOOPER_ENABLE) {
                 gSnoopEnable = atoi(val);
