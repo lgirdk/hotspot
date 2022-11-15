@@ -31,10 +31,11 @@ extern char                 g_Subsystem[32];
 int gSyseventfd;
 token_t gSysevent_token;
 char     vapBitMask = 0x00;
-char     gPriEndptIP[32] = {0};
-char     gSecEndptIP[32] = {0};
+char     gPriEndptIP[SIZE_OF_IP] = {0};
+char     gSecEndptIP[SIZE_OF_IP] = {0};
 bool     gXfinityEnable = false;
 int      vlanIdList[MAX_VAP];
+#define  BUFF_LEN 1024
 
 static pErr execRetVal = NULL;
 extern vlanSyncData_s gVlanSyncData[];
@@ -57,9 +58,10 @@ bool tunnel_param_synchronize() {
           CcspTraceError(("HOTSPOT_LIB : Malloc failed in %s \n", __FUNCTION__));
           return FALSE;
     }
-   
-    strncpy(tunnelSet->set_primary_endpoint, gPriEndptIP, SIZE_OF_IP);
-    strncpy(tunnelSet->set_sec_endpoint, gSecEndptIP, SIZE_OF_IP);
+
+    memset(tunnelSet,0,sizeof(tunnelSet_t));
+    strncpy(tunnelSet->set_primary_endpoint, gPriEndptIP, SIZE_OF_IP - 1);
+    strncpy(tunnelSet->set_sec_endpoint, gSecEndptIP, SIZE_OF_IP - 1);
     tunnelSet->set_gre_enable = gXfinityEnable;
     for(itr=0; itr<MAX_VAP; itr++)
     {
@@ -203,11 +205,58 @@ static int hotspot_sysevent_disable_param(){
     return 0;
 }
 
+char* get_local_ipv6_address(){
+
+    FILE *fp    = NULL;
+    char *buff1 = NULL;
+    int  Ep_len = -1;
+    CcspTraceInfo(("HOTSPOT_LIB : Entering get_local_ipv6_address\n"));
+    fp = popen("ip addr show erouter0 | grep -w global | awk '/inet6/ {print $2}' | cut -d/ -f1", "r");
+    if (fp == NULL)
+    {
+        CcspTraceError(("HOTSPOT_LIB : Popen Error\n"));
+        return NULL;
+    }
+    else
+    {
+        buff1 = (char *)calloc(BUFF_LEN, sizeof(char));
+        if (fgets(buff1, BUFF_LEN, fp) != NULL)
+        {
+            Ep_len = strlen(buff1);
+            if (buff1[Ep_len-1] == '\n')
+            {
+                buff1[Ep_len-1] = '\0';
+            }
+            CcspTraceInfo(("HOTSPOT_LIB : Local ipv6 address = %s \n", buff1));
+        }
+        else
+        {
+            CcspTraceWarning(("HOTSPOT_LIB : local wan interface has no Global IPv6 address\n"));
+            free(buff1);
+            buff1 = NULL;
+        }
+        pclose(fp);
+        return buff1;
+    }
+}
+
+int ipAddress_version(char *ipAddress){
+    unsigned char buf[sizeof(struct in6_addr)] = {0};
+    if (inet_pton(AF_INET, ipAddress, buf))
+        return 4;
+    else if (inet_pton(AF_INET6, ipAddress, buf))
+        return 6;
+    CcspTraceError(("HOTSPOT_LIB : %s Invalid IP Address\n", __FUNCTION__));
+    return -1;
+}
+
 int create_tunnel(char *gre_primary_endpoint){
 
    char   cmdBuf[1024] = {0};
    int    offset = 0;
    int    retValue = 0;
+   int    ip_version = -1;
+   char*  local_Ipv6Address = NULL;
 
    
          memset(cmdBuf, '\0', sizeof(cmdBuf));
@@ -220,14 +269,38 @@ int create_tunnel(char *gre_primary_endpoint){
                    return retValue;
              }
          }
+         CcspTraceInfo(("HOTSPOT_LIB : Rename the default gretap0 interface present in yocto\n"));
          offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s dev %s name %s; ", IP_SET, GRE_IFNAME, GRE_IFNAME_DUMMY);
-         offset += snprintf(cmdBuf+offset,
-                               sizeof(cmdBuf) - offset,
-                               "%s %s type gretap remote %s dev erouter0  dsfield b0 nopmtudisc;",
-                                 IP_ADD, GRE_IFNAME, gre_primary_endpoint);
-         #if defined (_ARRIS_XB6_PRODUCT_REQ_)
+         sys_execute_cmd(cmdBuf);
+         memset(cmdBuf, '\0', sizeof(cmdBuf));
+         offset = 0;
+         ip_version = ipAddress_version(gre_primary_endpoint);
+         CcspTraceInfo(("HOTSPOT_LIB : Creating IPv%d GRE tunnel\n", ip_version));
+         if (ip_version == 4){
+             offset += snprintf(cmdBuf+offset,
+                              sizeof(cmdBuf) - offset,
+                              "%s %s type gretap remote %s dev erouter0  dsfield b0 nopmtudisc;",
+                              IP_ADD, GRE_IFNAME, gre_primary_endpoint);
+         }else if (ip_version == 6){
+             local_Ipv6Address = get_local_ipv6_address();
+             if (local_Ipv6Address != NULL)
+             {
+                 offset += snprintf(cmdBuf+offset,
+                              sizeof(cmdBuf) - offset,
+                              "%s name %s type ip6gretap local %s remote %s encaplimit none;",
+                              IP_ADD, GRE_IFNAME, local_Ipv6Address, gre_primary_endpoint);
+                 free(local_Ipv6Address);
+             }
+             else
+             {
+                 CcspTraceWarning(("HOTSPOT_LIB : Unable to create gretap0 interface\n"));
+                 return -1;
+             }
+         }
+
+         #if defined (_ARRIS_XB6_PRODUCT_REQ_) || defined (INTEL_PUMA7)
          offset += snprintf(cmdBuf+offset,
                                sizeof(cmdBuf) - offset,
                                "%s %s txqueuelen 1000 mtu 1500;", IP_SET, GRE_IFNAME);
@@ -328,7 +401,24 @@ int hotspot_sysevent_enable_param(){
     sysevent_set(gSyseventfd, gSysevent_token, "hotspotfd-enable", "1", 0);
     sysevent_set(gSyseventfd, gSysevent_token, "hotspotfd-log-enable", "1", 0);
     sysevent_set(gSyseventfd, gSysevent_token, "gre_current_endpoint", gPriEndptIP, 0);
-
+    if((ipAddress_version(gPriEndptIP) == 6) || (ipAddress_version(gSecEndptIP) == 6))
+    {
+        CcspTraceInfo(("HOTSPOT_LIB : Add firewall rule to accept IPv6 GRE packets\n"));
+        sysevent_set(gSyseventfd, gSysevent_token, "gre_ipv6_fw_rule", " -A INPUT -i erouter0 -p gre -j ACCEPT", 0);
+    }
+    else
+    {
+        sysevent_set(gSyseventfd, gSysevent_token, "gre_ipv6_fw_rule", "", 0);
+    }
+    if((ipAddress_version(gPriEndptIP) == 4) || (ipAddress_version(gSecEndptIP) == 4))
+    {
+        CcspTraceInfo(("HOTSPOT_LIB :  Add firewall rule to accept IPv4 GRE packets\n"));
+        sysevent_set(gSyseventfd, gSysevent_token, "gre_ipv4_fw_rule", " -A INPUT -i erouter0 -p gre -j ACCEPT", 0);
+    }
+    else
+    {
+        sysevent_set(gSyseventfd, gSysevent_token, "gre_ipv4_fw_rule", "", 0);
+    }
     /*sysevent_get(gSyseventfd, gSysevent_token, "gre_current_endpoint", 
                                                  currentTunIP, sizeof(currentTunIP)); 
 
@@ -462,21 +552,21 @@ void configHotspotBridgeVlan(char *vapName, int wan_vlan){
 }
 
 int  validateIpAddress(char *ipAddress){
- 
     int result = -1;
-    struct sockaddr_in sa; 
-
+    unsigned char buf[sizeof(struct in6_addr)] = {0};
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s function....... \n", __FUNCTION__));
-    result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
+    result = inet_pton(AF_INET, ipAddress, buf);
     if(result == 1){
          if((0 == strcmp(ipAddress, "255.255.255.255")) ||
                  (0 == strcmp(ipAddress, "0.0.0.0"))){
-                CcspTraceInfo(("HOTSPOT_LIB :  %s IP is either 0.0.0.0 or 255.255.255.255....... \n", __FUNCTION__));
-                result = 0;
+           CcspTraceInfo(("HOTSPOT_LIB :  %s IP is either 0.0.0.0 or 255.255.255.255....... \n", __FUNCTION__));
+           result = 0;
          }
+    } else if (inet_pton(AF_INET6, ipAddress, buf)) {
+        result = 1;
     }
     return result;
- 
+
 }
 
 bool get_ssid_enable(int ssidIdx)
@@ -685,15 +775,15 @@ pErr setHotspot(void* const network){
          }
          memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
          memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
-         strncpy(gPriEndptIP, pGreTunnelData->entries->gre_primary_endpoint,SIZE_OF_IP);
+         strncpy(gPriEndptIP, pGreTunnelData->entries->gre_primary_endpoint,SIZE_OF_IP - 1);
          if(secTunInvalid)
          {
              CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip is invalid, Using primary EP IP \n"));
-             strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP);
+             strncpy(gSecEndptIP, gPriEndptIP, SIZE_OF_IP - 1);
          }
          else
          {
-             strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
+             strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP - 1);
          }
          gXfinityEnable = true;
          memset(cmdBuf, '\0', sizeof(cmdBuf));

@@ -45,7 +45,7 @@
 #define NMOCA_IFNAME      "nmoca0"
 #define L2SD0_IFNAME      "l2sd0"
 #define PARAM_COUNT   3
-#define SIZE_OF_IP    16
+#define SIZE_OF_IP    40
 #define SIZE_CMD      48
 
 
@@ -128,10 +128,12 @@ int jansson_store_tunnel_info(tunneldoc_t *);
 void configHotspotBridgeVlan(char *vapName, int wan_vlan);
 int  update_bridge_config (int index);
 int getHotspotVapIndex(char *vapName);
+char* getIpv6Address();
 int create_tunnel(char *gre_primary_endpoint);
 int hotspot_sysevent_enable_param();
 bool get_ssid_enable(int ssidIdx);
 bool prevalidateHotspotBlob(tunneldoc_t *pGreTunnelData);
 int  validateIpAddress(char *ipAddress);
+int ipAddress_version(char *ipAddress);
 int prepareFirstRollback();
 #endif

@@ -27,8 +27,8 @@
 /**************************************************************************/
 extern vlanSyncData_s gVlanSyncData[];
 extern char     vapBitMask;
-extern char     gPriEndptIP[32];
-extern char     gSecEndptIP[32];
+extern char     gPriEndptIP[SIZE_OF_IP];
+extern char     gSecEndptIP[SIZE_OF_IP];
 /**************************************************************************/
 
 int PsmGet(const char *param, char *value, int size);
@@ -43,7 +43,7 @@ static void rollback_vapBridge(char const *vap_name, int wan_vlan){
 bool checking_recovery_janson(json_t *json_tun_root) {
 
 
-    char secEndIp[40] = {0};
+    char secEndIp[SIZE_OF_IP] = {0};
     char dscp[10] = {0};
     bool change = 0;
 
@@ -56,7 +56,7 @@ bool checking_recovery_janson(json_t *json_tun_root) {
     json_t *jsecEndpnt = json_object_get(json_tun_root, J_GRE_SEC_EP_NAME);
     if ((jsecEndpoint && json_is_string(jsecEndpoint)) && !(jsecEndpnt)){
         strncpy(secEndIp,
-                json_string_value(jsecEndpoint), SIZE_OF_IP);
+                json_string_value(jsecEndpoint), SIZE_OF_IP - 1);
         CcspTraceInfo(("HOTSPOT_LIB : Recovered secondary EP IP...%s\n", secEndIp));
         json_object_set_new( json_tun_root, J_GRE_SEC_EP_NAME, json_string(secEndIp));
         change = 1;
@@ -79,8 +79,8 @@ bool checking_recovery_janson(json_t *json_tun_root) {
 
 bool jansson_rollback_tunnel_info() {
 
-    char priEndIp[40] = {0};
-    char secEndIp[40] = {0};
+    char priEndIp[SIZE_OF_IP] = {0};
+    char secEndIp[SIZE_OF_IP] = {0};
     int count = 0;
     int dscp = 0;
     int i = 0;
@@ -112,7 +112,7 @@ bool jansson_rollback_tunnel_info() {
     json_t *jpriEndpoint = json_object_get(json_tun_root, J_GRE_PRI_EP_NAME);
     if (jpriEndpoint && json_is_string(jpriEndpoint)){
         strncpy(priEndIp,
-                json_string_value(jpriEndpoint), SIZE_OF_IP);
+                json_string_value(jpriEndpoint), SIZE_OF_IP - 1);
     }
     memset(gPriEndptIP, '\0', sizeof(gPriEndptIP));
     strncpy(gPriEndptIP, priEndIp, SIZE_OF_IP);
@@ -121,7 +121,7 @@ bool jansson_rollback_tunnel_info() {
     json_t *jsecEndpoint = json_object_get(json_tun_root, J_GRE_SEC_EP_NAME);
     if (jsecEndpoint && json_is_string(jsecEndpoint)){
         strncpy(secEndIp,
-                json_string_value(jsecEndpoint), SIZE_OF_IP);
+                json_string_value(jsecEndpoint), SIZE_OF_IP - 1);
     }
     memset(gSecEndptIP, '\0', sizeof(gSecEndptIP));
     CcspTraceInfo(("HOTSPOT_LIB : Secondary endpoint ip secEndIp = %s len of sec = %zu \n", secEndIp, strlen(secEndIp)));
