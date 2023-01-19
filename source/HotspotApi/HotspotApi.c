@@ -693,7 +693,11 @@ pErr setHotspot(void* const network){
              strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP);
          }
          gXfinityEnable = true;
-         /* Deleting existing Tunnels*/
+         memset(cmdBuf, '\0', sizeof(cmdBuf));
+         CcspTraceInfo(("HOTSPOT_LIB : Creating /tmp/.hotspot_blob_inprogress\n"));
+         strncpy(cmdBuf, "touch /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+         sys_execute_cmd(cmdBuf);
+    /* Deleting existing Tunnels*/
          deleteVaps();
 
          create_tunnel( pGreTunnelData->entries->gre_primary_endpoint); 
@@ -740,8 +744,8 @@ pErr setHotspot(void* const network){
 }
 
 int deleteHotspot(){
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
      char   cmdBuf[1024];
+#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
      int    offset = 0;
      int    index = 0;
 #endif
@@ -772,11 +776,19 @@ int deleteHotspot(){
              hotspot_sysevent_enable_param();
              firewall_restart();
              tunnel_param_synchronize();
+             memset(cmdBuf, '\0', sizeof(cmdBuf));
+             CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
+             strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+             sys_execute_cmd(cmdBuf);
              return ROLLBACK_SUCCESS;
        }
        else{
              vapBitMask = 0x00;
              CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollbaack ptr null...\n"));
+             memset(cmdBuf, '\0', sizeof(cmdBuf));
+             CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
+             strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+             sys_execute_cmd(cmdBuf);
              return BLOB_EXEC_FAILURE;
        }
 }
@@ -823,6 +835,10 @@ int confirmVap(){
 
      if(file_status != 0){
            CcspTraceError(("HOTSPOT_LIB : hotspot.json file not available in tmp  %s \n", __FUNCTION__));
+           memset(Buf, '\0', sizeof(Buf));
+           CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
+           strncpy(Buf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+           sys_execute_cmd(Buf);
            memset((char *)execRetVal,0,sizeof(Err));
            execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
            return (intptr_t)execRetVal;
@@ -843,6 +859,10 @@ int confirmVap(){
          firewall_restart();
          tunnel_param_synchronize();
      }
+     memset(Buf, '\0', sizeof(Buf));
+     CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
+     strncpy(Buf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+     sys_execute_cmd(Buf);
 /* Adding flag for pandm to avoid sending multiple blobs */
      memset(Buf, '\0', sizeof(Buf));
      snprintf(Buf, sizeof(Buf), "touch /tmp/.hotspot_blob_executed");
