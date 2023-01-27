@@ -19,5 +19,5 @@
 if UNIT_TEST_DOCKER_SUPPORT
 SUBDIRS = test
 else
-SUBDIRS = arp_solicitation HotspotApi hotspotfd XfinityTestAgent
+SUBDIRS = arp_solicitation HotspotApi hotspotfd
 endif
