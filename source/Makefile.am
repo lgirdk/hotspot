@@ -16,7 +16,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = arp_solicitation HotspotApi hotspotfd XfinityTestAgent
+SUBDIRS = arp_solicitation HotspotApi hotspotfd
+
+#SUBDIRS += XfinityTestAgent
 
 if WITH_GTEST_SUPPORT
 SUBDIRS += test
