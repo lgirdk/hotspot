@@ -61,12 +61,18 @@
 #define PSM_PRI_IP             "dmsb.hotspot.tunnel.1.PrimaryRemoteEndpoint"       
 #define PSM_SEC_IP             "dmsb.hotspot.tunnel.1.SecondaryRemoteEndpoint"
 #define PSM_DSCP_MARK          "dmsb.hotspot.gre.1.DSCPMarkPolicy"
- 
+
+#define PSM_VLAN_OPEN_2G       "dmsb.l2net.3.Vid"
+#define PSM_VLAN_OPEN_5G       "dmsb.l2net.4.Vid"
+#define PSM_VLAN_SECURE_2G     "dmsb.l2net.7.Vid"
+#define PSM_VLAN_SECURE_5G     "dmsb.l2net.8.Vid"
+
 #define WEB_CONF_ENABLE         "eRT.com.cisco.spvtg.ccsp.webpa.WebConfigRfcEnable"
      
 #define END_POINT_IP 40
 #if defined (_CBR_PRODUCT_REQ_)
    #define MAX_VAP      5
+   #define PSM_VLAN_PUBLIC        "dmsb.l2net.11.Vid"
 #else
    #define MAX_VAP      4
 #endif

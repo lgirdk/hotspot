@@ -538,8 +538,11 @@ int
 PsmSet(const char *param, const char *value)
 {
     if (PSM_Set_Record_Value2(bus_handle, g_Subsystem,
-                (char *)param, ccsp_string, (char *)value) != CCSP_SUCCESS)
-        return -1; 
+                (char *)param, ccsp_string, (char *)value) != CCSP_SUCCESS){
+        CcspTraceError(("HOTSPOT_LIB : PSM set is unsuccessful \n"));
+        return -1;
+    }
+    CcspTraceInfo(("HOTSPOT_LIB : PSM Set for %s with value %s is successful \n", param, value));
     return 0;
 }
 
@@ -858,6 +861,23 @@ int confirmVap(){
          hotspot_sysevent_enable_param();
          firewall_restart();
          tunnel_param_synchronize();
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[0]);
+         PsmSet(PSM_VLAN_OPEN_2G, Buf);
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[1]);
+         PsmSet(PSM_VLAN_OPEN_5G, Buf);
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[2]);
+         PsmSet(PSM_VLAN_SECURE_2G, Buf);
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[3]);
+         PsmSet(PSM_VLAN_SECURE_5G, Buf);
+#if defined (_CBR_PRODUCT_REQ_)
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);
+         PsmSet(PSM_VLAN_PUBLIC, Buf);
+#endif
      }
      memset(Buf, '\0', sizeof(Buf));
      CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
