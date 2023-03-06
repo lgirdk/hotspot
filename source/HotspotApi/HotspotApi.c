@@ -164,7 +164,7 @@ int update_bridge_config(int index) {
         memset(query,'\0',sizeof(query));
         memset(param, '\0', sizeof (param));
         snprintf(rule, sizeof(rule),"-A FORWARD -o %s -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d",
-                gVlanSyncData[index].bridgeName, index+1 );
+                gVlanSyncData[index].bridgeName, gVlanSyncData[index].queue_num );
         snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
         sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
         sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
@@ -544,6 +544,14 @@ int getHotspotVapIndex(char *vapName) {
      else if (strcmp(vapName, VAP_NAME_9)==0){
           return VLAN_INDEX_3;
      }
+#if defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
+     else if (strcmp(vapName, VAP_NAME_11)==0){
+          return VLAN_INDEX_4;
+     }
+     else if (strcmp(vapName, VAP_NAME_12)==0){
+          return VLAN_INDEX_5;
+     }
+#endif
      else{
         CcspTraceInfo(("HOTSPOT_LIB : %s Vap name not matched \n", __FUNCTION__));
         return -1;
@@ -967,6 +975,14 @@ int confirmVap(){
          memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[3]);
          PsmSet(PSM_VLAN_SECURE_5G, Buf);
+#if defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);
+         PsmSet(PSM_VLAN_OPEN_6G, Buf);
+         memset(Buf, 0, sizeof(Buf));
+         snprintf(Buf, sizeof(Buf), "%d", vlanIdList[5]);
+         PsmSet(PSM_VLAN_SECURE_6G, Buf);
+#endif
 #if defined (_CBR_PRODUCT_REQ_)
          memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);

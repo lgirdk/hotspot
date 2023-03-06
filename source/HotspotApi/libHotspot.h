@@ -54,7 +54,10 @@
 #define VAP_NAME_8             "hotspot_secure_2g"
 #define VAP_NAME_9             "hotspot_secure_5g"
 #define VAP_NAME_10            "new_hotspot_open_2g"
-
+#if defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
+#define VAP_NAME_11             "hotspot_open_6g"
+#define VAP_NAME_12             "hotspot_secure_6g"
+#endif
 //PSM objects for Xfinity Hotspot
 #define PSM_HOTSPOT_ENABLE     "dmsb.hotspot.enable"
 #define PSM_VLANID             "dmsb.hotspot.tunnel.1.interface.%d.VLANID"
@@ -67,12 +70,19 @@
 #define PSM_VLAN_SECURE_2G     "dmsb.l2net.7.Vid"
 #define PSM_VLAN_SECURE_5G     "dmsb.l2net.8.Vid"
 
+#if defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
+#define PSM_VLAN_OPEN_6G       "dmsb.l2net.15.Vid"
+#define PSM_VLAN_SECURE_6G     "dmsb.l2net.16.Vid"
+#endif
+
 #define WEB_CONF_ENABLE         "eRT.com.cisco.spvtg.ccsp.webpa.WebConfigRfcEnable"
      
 #define END_POINT_IP 40
 #if defined (_CBR_PRODUCT_REQ_)
    #define MAX_VAP      5
    #define PSM_VLAN_PUBLIC        "dmsb.l2net.11.Vid"
+#elif defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
+   #define MAX_VAP      6
 #else
    #define MAX_VAP      4
 #endif
@@ -106,7 +116,9 @@ typedef enum {
       VLAN_INDEX_0 = 0,
       VLAN_INDEX_1,
       VLAN_INDEX_2,
-      VLAN_INDEX_3
+      VLAN_INDEX_3,
+      VLAN_INDEX_4,
+      VLAN_INDEX_5
 }eVlanID;
 
 typedef struct{
@@ -119,6 +131,7 @@ typedef struct{
 #if defined(_COSA_INTEL_XB3_ARM_)
       int          instance;
 #endif
+      int          queue_num;
 }vlanSyncData_s;
 /**/
 void firewall_restart();

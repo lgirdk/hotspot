@@ -1314,7 +1314,6 @@ void *dhcp_snooper_init(void *data)
         }
         // Install a callback on each of the iptables NFQUEUE queues
         if (!(myQueue = nfq_create_queue(nfqHandle,  i, &snoop_packetHandler, &gPriv_data[j++]))) {
-    
             CcspTraceError(("Error in nfq_create_queue(): %p\n", myQueue));
             exit(1);
         } else {

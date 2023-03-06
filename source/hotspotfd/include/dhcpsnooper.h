@@ -83,6 +83,7 @@
 #define kSnooper_circuit_id3                "snooper-queue3-circuitID"
 #define kSnooper_circuit_id4                "snooper-queue4-circuitID"
 #define kSnooper_circuit_id5                "snooper-queue5-circuitID"
+#define ksnooper_circuit_id6                "snooper-queue6-circuitID"
 
 #define kSnooper_ssid_index0                 "snooper-ssid0-index"
 #define kSnooper_ssid_index1                 "snooper-ssid1-index"
@@ -90,6 +91,7 @@
 #define kSnooper_ssid_index3                 "snooper-ssid3-index"
 #define kSnooper_ssid_index4                 "snooper-ssid4-index"
 #define kSnooper_ssid_index5                 "snooper-ssid5-index"
+#define ksnooper_ssid_index6                 "snooper-ssid6-index"
 
 #ifdef WAN_FAILOVER_SUPPORTED
 #define kcurrent_wan_interface                "current_wan_ifname"
@@ -107,8 +109,8 @@
 #define kSnooper_MaxCircuitLen  80
 
 #define kSnoop_DefaultQueue             1
-#define kSnoop_DefaultNumberOfQueues    5
-#define kSnoop_MaxNumberOfQueues        5
+#define kSnoop_DefaultNumberOfQueues    6
+#define kSnoop_MaxNumberOfQueues        6
 
 #define kSnoop_LOG_ERR     1
 #define kSnoop_LOG_INFO    2
@@ -144,7 +146,7 @@
 #define kSnoop_DefaultRemoteID "00:10:A4:23:B6:C1"
 #define kSnoop_MaxNumAssociatedDevices  30
 #define kSnoop_DefaultMaxNumberOfClients   kSnooper_MaxClients
-#define kSnoop_MaxCircuitIDs        6
+#define kSnoop_MaxCircuitIDs        7
 #define MAX_NUM_TRIES 15
 
 #define READ 0
