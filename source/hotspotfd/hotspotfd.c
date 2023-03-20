@@ -94,7 +94,7 @@
 #define kDefault_SecondaryTunnelEP      "172.40.0.1" 
 //#define kDefault_SecondaryMaxTime       300 // max. time allowed on secondary EP in secs.
 #define kDefault_SecondaryMaxTime       43200  //zqiu: according to XWG-CP-15, default time is 12 hours
-
+#define kDefault_DummyEP        "dummy_EP"
 #define HOTSPOTFD_STATS_PATH    "/var/tmp/hotspotfd.log"
 
 #define kMax_InterfaceLength            20
@@ -169,7 +169,7 @@ static pthread_mutex_t keep_alive_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static bool gPriStateIsDown = false;
 static bool gSecStateIsDown = false;
-static bool gBothDnFirstSignal = false;
+static bool gBothDnFirstSignal = true;
 
 static bool gTunnelIsUp = false;
 static bool gVapIsUp = true;
@@ -1796,6 +1796,10 @@ void hotspot_start()
     }
 #endif
 
+    if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kHotspotfd_tunnelEP, kDefault_DummyEP, 0))
+    {
+        CcspTraceError(("sysevent set %s failed for %s\n", kHotspotfd_tunnelEP, kDefault_DummyEP));
+    }
     keep_it_alive:
 
     while (gKeepAliveEnable == true) {
