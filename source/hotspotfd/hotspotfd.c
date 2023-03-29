@@ -992,27 +992,18 @@ static bool hotspotfd_isValidIpAddress(char *ipAddress)
 static bool hotspot_isRemoteWan(char *wan_interface)
 {
      char psm_val[128] = {0};
-     int ret = 0;
 
      PsmGet(PSM_WAN_INT, psm_val, sizeof(psm_val));
      CcspTraceInfo(("HotspotTunnelEvent : Wan interface psm value %s\n", psm_val));
  
      if ( (strcmp(wan_interface, psm_val) == 0)){
          wanFailover = true;
-         ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_DOWN");
-         if ( ret != CCSP_SUCCESS )
-         {
-              CcspTraceError(("%s : TunnelStatus down failed in remote wan,  ret value is %d\n",__FUNCTION__ ,ret));
-         }
+         notify_tunnel_status("Down");
          return true;
      }
      else{
-         ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus" , "TUNNEL_UP");
-         if ( ret != CCSP_SUCCESS )
-         {
-               CcspTraceError(("%s : TunnelStatus up failed in remote wan,  ret value is %d\n",__FUNCTION__ ,ret));
-         }
          wanFailover = false;
+         notify_tunnel_status("Up");
          return false;
      }
 }
@@ -1026,6 +1017,27 @@ static bool hotspot_check_wan_failover_status(char *val)
      CcspTraceInfo(("HotspotTunnelEvent : %s New value of CurrentActiveInterface is -= %s\n",__FUNCTION__, cbuff));
      isRemoteWANEnabled = hotspot_isRemoteWan(cbuff);
      hotspot_wan_failover(isRemoteWANEnabled);
+     if(isRemoteWANEnabled)
+     {
+         gPrimaryIsAlive = false;
+         gPrimaryIsActive = true;    // Check Primary EP first after coming back to DOCSIS WAN
+         gSecondaryIsAlive = false;
+         gSecondaryIsActive = false;
+         gPriStateIsDown = true;
+         gSecStateIsDown = true;
+         gBothDnFirstSignal = false;
+         gTunnelIsUp=false;
+         pthread_mutex_lock(&keep_alive_mutex);
+         gbFirstPrimarySignal = true;
+         gbFirstSecondarySignal = true;
+         pthread_mutex_unlock(&keep_alive_mutex);
+         CcspTraceInfo(("Primary and Secondary GRE flag set to true in %s\n", __FUNCTION__));
+         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs,
+                                       kHotspotfd_tunnelEP, "", 0))
+         {
+             CcspTraceError(("sysevent set %s failed on %s\n", kHotspotfd_tunnelEP, __FUNCTION__));
+         }
+     }
      return true;
 }
 #endif
@@ -1945,7 +1957,7 @@ Try_secondary:
 
                 // Check for absolute max. secondary active interval
                 // TODO: If reached tunnel should be swicthed to primary
-                //if (secondaryKeepAlives > gSecondaryMaxTime/60) {
+                //if (secondaryKeepAlives > gSecondaryMaxTime/60)
 
 				if( timeElapsed > gSecondaryMaxTime ) {
 
@@ -2070,7 +2082,7 @@ Try_secondary:
         }
 
         //gTunnelIsUp==false;
-        while (gKeepAliveEnable == true) {
+        while (gKeepAliveEnable == true && wanFailover == false) {
             gKeepAlivesSent++;
             if (hotspotfd_ping(gpPrimaryEP, gTunnelIsUp) == STATUS_SUCCESS) {
                 gPrimaryIsActive = true;
@@ -2091,10 +2103,9 @@ Try_secondary:
         }
     }
 
-    while (gKeepAliveEnable == false) {
+    while (gKeepAliveEnable == false || wanFailover == true) {
         sleep(1);
     }
 
     goto keep_it_alive;
-    
 }

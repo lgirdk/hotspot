@@ -1005,7 +1005,7 @@ static int wanfailover_handleTunnel(bool create)
         for(index = 0; index < MAX_VAP; index++){
             offset = 0;
             memset(cmdBuf, '\0', sizeof(cmdBuf));
-#if !defined(_COSA_INTEL_XB3_ARM_)
+#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
