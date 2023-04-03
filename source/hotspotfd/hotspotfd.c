@@ -731,7 +731,7 @@ printf("------- ping >>\n");
 			l_iPingCount++;
 
         firstAttempt = true;
-        for (loop = 0;loop < 10; loop++) {
+        for (loop = 0;loop < 20; loop++) {
             socklen_t len = sizeof(r_addr);
 //icmp echo and response both using same structure, memset before each operation
  
@@ -772,8 +772,10 @@ printf("------- ping >>\n");
 //and hence attempt a ping again and check if there is a response for it
 //Check 10 ICMP packets whether they are from the hotspot tunnel endpoint
 
-                if(status == STATUS_SUCCESS)
+                if(status == STATUS_SUCCESS){
+                    keepAliveCount = 1;
                     break;
+                }
                 else if(!firstAttempt)
                     continue;
                 else
