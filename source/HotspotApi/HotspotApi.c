@@ -358,8 +358,6 @@ static int deleteVaps(){
 static void hotspot_async_reg()
 {
     char cmdBuff[300] = {0};
-
-    memset(cmdBuff, '\0', sizeof(cmdBuff));
     CcspTraceInfo(("HOTSPOT_LIB : configuring sysevent async....\n"));
     snprintf(cmdBuff, sizeof(cmdBuff), "%s %s", GRE_ASYNC_HOT_EP, GRE_PATH);
     CcspTraceInfo(("HOTSPOT_LIB : sysevent content %s\n", cmdBuff));
@@ -427,8 +425,14 @@ int hotspot_sysevent_enable_param(){
     */
     //TODO: This will be moved to CcspHotspot and new API in library to reverse
     //the tunnel
-    hotspot_async_reg();
-
+    if( access(GRE_FILE, F_OK) == 0 )
+    {
+        CcspTraceInfo(("HOTSPOT_LIB : sysevent async for handle_gre.sh is already configured\n"));
+    }
+    else
+    {
+        hotspot_async_reg();
+    }
     memset(cmdBuff, '\0', sizeof(cmdBuff));
     CcspTraceInfo(("HOTSPOT_LIB : Stopping existing Hotspot...\n"));
     strncpy(cmdBuff, "killall CcspHotspot", SIZE_CMD);
