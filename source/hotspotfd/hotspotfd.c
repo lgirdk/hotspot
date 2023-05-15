@@ -96,6 +96,7 @@
 #define kDefault_SecondaryMaxTime       43200  //zqiu: according to XWG-CP-15, default time is 12 hours
 #define kDefault_DummyEP        "dummy_EP"
 #define HOTSPOTFD_STATS_PATH    "/var/tmp/hotspotfd.log"
+#define HOTSPOT_ENABLED_SSIDS   "/tmp/.enabled_hotspot_ssids"
 
 #define kMax_InterfaceLength            20
 #define DEBUG_INI_NAME "/etc/debug.ini"
@@ -382,6 +383,42 @@ static void notify_tunnel_status(char *status)
 
 static bool set_validatessid() {
 
+#if defined(RDK_ONEWIFI)
+#if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
+    const char *hotspot_ssids[]={"5","6","9","10","16"};
+#elif defined (_XB8_PRODUCT_REQ_)
+    const char *hotspot_ssids[]={"5","6","9","10","19","21"};
+#else
+    const char *hotspot_ssids[]={"5","6","9","10"};
+#endif
+    int i = 0;
+    char enabled_ssids[32] = {0};
+    FILE *ssid_fp = NULL;
+    for (i = 0; i < SSIDVAL; i++)
+    {
+       if(ssid_reset_mask & (1<<i))
+       {
+           strcat_s(enabled_ssids, sizeof(enabled_ssids), hotspot_ssids[i]);
+           CcspTraceInfo(("SSID %s should be enabled\n", hotspot_ssids[i]));
+           strcat_s(enabled_ssids, sizeof(enabled_ssids), " ");
+       }
+       else
+       {
+           CcspTraceInfo(("SSID %s should be disabled\n", hotspot_ssids[i]));
+       }
+    }
+    ssid_fp = fopen(HOTSPOT_ENABLED_SSIDS, "w");
+    if(ssid_fp == NULL)
+    {
+        CcspTraceError(("Unable to open %s\n", HOTSPOT_ENABLED_SSIDS));
+        return FALSE;
+    }
+    fprintf(ssid_fp, "%s", enabled_ssids);
+    fclose(ssid_fp);
+    ssid_fp = NULL;
+    ssid_reset_mask = 0;
+    return TRUE;
+#else
     CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
     parameterValStruct_t  *param_val = NULL;
     char  component[256]  = "eRT.com.cisco.spvtg.ccsp.wifi";
@@ -501,6 +538,7 @@ static bool set_validatessid() {
 #endif
     ssid_reset_mask = 0;
     return TRUE;
+#endif
 }
 
 
