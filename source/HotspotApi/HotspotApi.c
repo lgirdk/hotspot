@@ -879,22 +879,32 @@ int deleteHotspot(){
               }
 #endif
 
-               vapBitMask = 0x00;
-               hotspot_sysevent_enable_param();
-               firewall_restart();
-               tunnel_param_synchronize();
-           }
-           else
-           {
-               CcspTraceInfo(("HOTSPOT_LIB : Hotspot is Disabled in the rollback setting\n"));
-           }
-           memset(cmdBuf, '\0', sizeof(cmdBuf));
-           CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
-           strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-           sys_execute_cmd(cmdBuf);
-           return ROLLBACK_SUCCESS;
-     }
-     else{
+             vapBitMask = 0x00;
+             hotspot_sysevent_enable_param();
+             firewall_restart();
+             tunnel_param_synchronize();
+
+#if (defined(_CBR_PRODUCT_REQ_) && !defined(_CBR2_PRODUCT_REQ_))
+             memset(cmdBuf, '\0', sizeof(cmdBuf));
+             sleep(5);
+             strncpy(cmdBuf, "killall -q -9 eapd 2>/dev/null", sizeof(cmdBuf)-1);
+             sys_execute_cmd(cmdBuf);
+             sleep(5);
+             CcspTraceInfo(("[%s] [%d]Restarting EAPD.. Buf : [%s]\n", __func__, __LINE__, cmdBuf));
+             sys_execute_cmd("eapd");
+#endif
+         }
+         else
+         {
+             CcspTraceInfo(("HOTSPOT_LIB : Hotspot is Disabled in the rollback setting\n"));
+         }
+         memset(cmdBuf, '\0', sizeof(cmdBuf));
+         CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
+         strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+         sys_execute_cmd(cmdBuf);
+         return ROLLBACK_SUCCESS;
+       }
+       else{
              vapBitMask = 0x00;
              CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollbaack ptr null...\n"));
              memset(cmdBuf, '\0', sizeof(cmdBuf));
@@ -994,6 +1004,15 @@ int confirmVap(){
          memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);
          PsmSet(PSM_VLAN_PUBLIC, Buf);
+#endif
+#if (defined(_CBR_PRODUCT_REQ_) && !defined(_CBR2_PRODUCT_REQ_))
+         memset(Buf, '\0', sizeof(Buf));
+         sleep(5);
+         strncpy(Buf, "killall -q -9 eapd 2>/dev/null", sizeof(Buf)-1);
+         sys_execute_cmd(Buf);
+         sleep(5);
+         CcspTraceInfo(("[%s] [%d]Restarting EAPD.. Buf : [%s]\n", __func__, __LINE__, Buf));
+         sys_execute_cmd("eapd");
 #endif
      }
      memset(Buf, '\0', sizeof(Buf));
