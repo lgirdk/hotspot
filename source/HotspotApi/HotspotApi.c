@@ -859,9 +859,11 @@ int deleteHotspot(){
      vapBitMask = 0x00;
      CcspTraceInfo(("HOTSPOT_LIB : Entering 'deleteHotspot'\n"));
      // rollback to previous setting ... Read the value from previous legacy hotspot....
-      ret = jansson_rollback_tunnel_info();
-      if(TRUE == ret){
-             CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollback success...\n"));
+     ret = jansson_rollback_tunnel_info();
+     if(TRUE == ret){
+         CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollback success...\n"));
+         if(gXfinityEnable == true)
+         {
 #if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
              for(index = 0; index < MAX_VAP; index++){
                  if (gVlanSyncData[index].bitVal & vapBitMask){
@@ -877,17 +879,22 @@ int deleteHotspot(){
               }
 #endif
 
-             vapBitMask = 0x00;
-             hotspot_sysevent_enable_param();
-             firewall_restart();
-             tunnel_param_synchronize();
-             memset(cmdBuf, '\0', sizeof(cmdBuf));
-             CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
-             strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-             sys_execute_cmd(cmdBuf);
-             return ROLLBACK_SUCCESS;
-       }
-       else{
+               vapBitMask = 0x00;
+               hotspot_sysevent_enable_param();
+               firewall_restart();
+               tunnel_param_synchronize();
+           }
+           else
+           {
+               CcspTraceInfo(("HOTSPOT_LIB : Hotspot is Disabled in the rollback setting\n"));
+           }
+           memset(cmdBuf, '\0', sizeof(cmdBuf));
+           CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
+           strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+           sys_execute_cmd(cmdBuf);
+           return ROLLBACK_SUCCESS;
+     }
+     else{
              vapBitMask = 0x00;
              CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollbaack ptr null...\n"));
              memset(cmdBuf, '\0', sizeof(cmdBuf));

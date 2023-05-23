@@ -29,6 +29,7 @@ extern vlanSyncData_s gVlanSyncData[];
 extern char     vapBitMask;
 extern char     gPriEndptIP[SIZE_OF_IP];
 extern char     gSecEndptIP[SIZE_OF_IP];
+extern bool     gXfinityEnable;
 /**************************************************************************/
 
 int PsmGet(const char *param, char *value, int size);
@@ -72,7 +73,7 @@ bool checking_recovery_janson(json_t *json_tun_root) {
        json_dump_file(json_tun_root, "/nvram/hotspot.json", JSON_INDENT(1));
     }
     else{
-        CcspTraceInfo(("HOTSPOT_LIB : No need Recovery for dscp and IP..."));
+        CcspTraceInfo(("HOTSPOT_LIB : No need Recovery for dscp and IP...\n"));
     }
     return 1;
 }
@@ -149,7 +150,12 @@ bool jansson_rollback_tunnel_info() {
     }
     CcspTraceInfo(("HOTSPOT_LIB : file load hotspot gre_enable...%d \n", gre_enable));
     if(gre_enable){
-             create_tunnel(priEndIp);
+        create_tunnel(priEndIp);
+        gXfinityEnable = true;
+    }
+    else
+    {
+        gXfinityEnable = false;
     }
 
     json_t *json_tun = json_object_get(json_tun_root, J_GRE_TUNNEL_NET);
