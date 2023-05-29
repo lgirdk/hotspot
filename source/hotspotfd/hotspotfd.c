@@ -1857,7 +1857,7 @@ void hotspot_start()
     }
     keep_it_alive:
 
-    while (gKeepAliveEnable == true) {
+    while ((gKeepAliveEnable == true) && (wanFailover == false)) {
 Try_primary:
         while (gPrimaryIsActive && (gKeepAliveEnable == true) && (wanFailover == false)) {
 
