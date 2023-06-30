@@ -1701,7 +1701,7 @@ static int hotspotfd_getStartupParameters(void)
 	        } 
 			else 
 			{
-	            if(gSnoopSSIDList[i]) 
+	            if(gSnoopSSIDList[i][0]=='\0') 
 				{
     	           gSnoopSSIDListInt[i] = atoi(gSnoopSSIDList[i]);
             	} 
