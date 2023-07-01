@@ -64,7 +64,7 @@ bool checking_recovery_janson(json_t *json_tun_root) {
     }
     json_t *jdscp = json_object_get(json_tun_root, J_GRE_DSCP);
     if (jdscp && json_is_string(jdscp)){
-        strcpy(dscp, json_string_value(jdscp));
+        strncpy(dscp, json_string_value(jdscp),sizeof(dscp)-1);
         json_object_set_new( json_tun_root, J_GRE_DSCP, json_integer(atoi(dscp)));
         CcspTraceInfo(("HOTSPOT_LIB : Recovered dscp value...%s\n", dscp));
         change = 1;
