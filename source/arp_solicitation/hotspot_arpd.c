@@ -302,7 +302,7 @@ static int get_interface_by_ifname(if_t *target)
     struct ifreq req;
 	errno_t rc = -1;
 
-    if ((NULL == target) && ('\0' == target->ifname[0])){
+    if ((NULL == target) || ('\0' == target->ifname[0])){
         printf("Invalid parameters!\n");
         return FALSE;
     }
