@@ -59,10 +59,10 @@
 #include <netinet/icmp6.h>
 #include "ssp_global.h"
 #include "ansc_platform.h"
-
+#include "libHotspot.h"
+#include "libHotspotApi.h"
 #ifdef WAN_FAILOVER_SUPPORTED
 #include <rbus.h>
-#include "libHotspotApi.h"
 #endif
 
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
@@ -179,6 +179,9 @@ static bool gTunnelIsUp = false;
 static bool gVapIsUp = true;
 static bool wanFailover = false; //Always false as long as wan failover does'nt happen
 
+static char old_wan_ipv4[kMax_IPAddressLength];
+static char old_wan_ipv6[kMax_IPAddressLength];
+
 #ifdef WAN_FAILOVER_SUPPORTED
 extern int hotspot_wan_failover(bool isRemoteWANEnabled);
 extern int PsmGet(const char *param, char *value, int size);
@@ -240,6 +243,8 @@ typedef enum {
     SNOOPER_CIRCUITENABLE,
     SNOOPER_REMOTEENABLE,
     SNOOPER_MAXCLIENTS,
+    HOTSPOTFD_CURRENT_WAN_IPADDR_V4,
+    HOTSPOTFD_CURRENT_WAN_IPADDR_V6,
 #ifdef WAN_FAILOVER_SUPPORTED
     CURRENT_WAN_IFNAME,
     TEST_CURRENT_WAN_IFNAME,
@@ -270,7 +275,9 @@ Hotspotfd_MsgItem hotspotfdMsgArr[] = {
     {"snooper-log-enable",                            SNOOPER_LOGENABLE},
     {"snooper-circuit-enable",                        SNOOPER_CIRCUITENABLE},
     {"snooper-remote-enable",                         SNOOPER_REMOTEENABLE},
-    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS}
+    {"snooper-max-clients",                           SNOOPER_MAXCLIENTS},
+    {"current_wan_ipaddr",                            HOTSPOTFD_CURRENT_WAN_IPADDR_V4},
+    {"wan6_ipaddr",                                   HOTSPOTFD_CURRENT_WAN_IPADDR_V6}
 #ifdef WAN_FAILOVER_SUPPORTED
     ,
     {"current_wan_ifname",                            CURRENT_WAN_IFNAME},
@@ -1140,6 +1147,8 @@ static void *hotspotfd_sysevent_handler(void *data)
     async_id_t snoop_max_clients_id;
     async_id_t snoop_circuit_ids[kSnoop_MaxCircuitIDs]; 
     async_id_t snoop_ssids_ids[kSnoop_MaxCircuitIDs];
+    async_id_t hotspotfd_current_wan_ipaddr_v4_id;
+    async_id_t hotspotfd_current_wan_ipaddr_v6_id;
 #ifdef WAN_FAILOVER_SUPPORTED
     async_id_t current_wan_interface_id;
     async_id_t test_current_wan_interface_id;
@@ -1164,6 +1173,10 @@ static void *hotspotfd_sysevent_handler(void *data)
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_circuit_enable,  &snoop_circuit_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_remote_enable,   &snoop_remote_enable_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, kSnooper_max_clients,     &snoop_max_clients_id);
+    sysevent_set_options(sysevent_fd, sysevent_token, khotspotfd_current_wan_ipaddr_v4,TUPLE_FLAG_EVENT);
+    sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_current_wan_ipaddr_v4,&hotspotfd_current_wan_ipaddr_v4_id);
+    sysevent_set_options(sysevent_fd, sysevent_token, khotspotfd_current_wan_ipaddr_v6,TUPLE_FLAG_EVENT);
+    sysevent_setnotification(sysevent_fd, sysevent_token, khotspotfd_current_wan_ipaddr_v6,&hotspotfd_current_wan_ipaddr_v6_id);
 #ifdef WAN_FAILOVER_SUPPORTED
     sysevent_setnotification(sysevent_fd, sysevent_token, kcurrent_wan_interface,      &current_wan_interface_id);
     sysevent_setnotification(sysevent_fd, sysevent_token, ktest_current_wan_interface, &test_current_wan_interface_id);
@@ -1303,7 +1316,58 @@ static void *hotspotfd_sysevent_handler(void *data)
 
                 CcspTraceInfo(("gSnoopMaxNumberOfClients: %u\n", gSnoopMaxNumberOfClients));
 
+            } else if (ret_value == HOTSPOTFD_CURRENT_WAN_IPADDR_V4) {
+                 CcspTraceInfo(("current_wan_ipaddr is changed to %s\n", val));
+                 int ipaddr_length = strlen(val);
+                 char current_EP[kMax_IPAddressLength];
+                 if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "gre_current_endpoint" , current_EP, sizeof(current_EP))) {
+                    CcspTraceError(("sysevent_get failed to get gre_current_endpoint\n"));
+                 }
+                 if(ipAddress_version(current_EP) == 4){
+                    if((strncmp(val, "0.0.0.0", ipaddr_length) == 0))
+                    {
+                         CcspTraceInfo(("current_wan_ipaddr is %s\n", val));
+                    }
+                    else if((strncmp(val,old_wan_ipv4, ipaddr_length) == 0))
+                    {
+                         CcspTraceInfo(("current_wan_ipaddr and old_wan_ipv4 are same \n"));
+                    }
+                    else
+                    {
+                         CcspTraceInfo(("current_wan_ipaddr and old_wan_ipv4 are not same \n"));
+                         strcpy_s(old_wan_ipv4, sizeof(old_wan_ipv4), val);
+                         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv4addr", old_wan_ipv4, 0)){
+                            CcspTraceError(("sysevent_set failed to set old_wan_ipv4addr\n"));
+                        }
+                        recreate_tunnel();
+                    }
+                 }
+
+            } else if (ret_value == HOTSPOTFD_CURRENT_WAN_IPADDR_V6) {
+                 CcspTraceInfo(("wan6_ipaddr is changed to %s\n", val));
+                 int ipaddr_length = strlen(val);
+                 char current_EP[kMax_IPAddressLength];
+                 if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "gre_current_endpoint" , current_EP, sizeof(current_EP))) {
+                    CcspTraceError(("sysevent_get failed to get gre_current_endpoint\n"));
+                 }
+                 if(ipAddress_version(current_EP) == 6){
+
+                    if((strncmp(val,old_wan_ipv6, ipaddr_length) == 0))
+                    {
+                         CcspTraceInfo(("wan6_ipaddr and old_wan_ipv6 are same \n"));
+                    }
+                    else
+                    {
+                         CcspTraceInfo(("wan6_ipaddr and old_wan_ipv6 are not same \n"));
+                         strcpy_s(old_wan_ipv6, sizeof(old_wan_ipv6), val);
+                         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv6addr", old_wan_ipv6, 0)){
+                            CcspTraceError(("sysevent_set failed to set old_wan_ipv6addr\n"));
+                        }
+                        recreate_tunnel();
+                    }
+                 }
             }
+
 #ifdef WAN_FAILOVER_SUPPORTED
             else if (ret_value == CURRENT_WAN_IFNAME || ret_value == TEST_CURRENT_WAN_IFNAME) {
                  hotspot_check_wan_failover_status(val);
@@ -1552,6 +1616,53 @@ static int hotspotfd_getStartupParameters(void)
             status = STATUS_FAILURE;
             break;
         }
+
+        if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv4addr" , old_wan_ipv4, sizeof(old_wan_ipv4))) {
+             CcspTraceError(("sysevent_get failed to get current_wan_ipaddr\n"));
+        }
+
+        CcspTraceInfo(("old_wan_ipv4addr is  %s\n", old_wan_ipv4));
+
+        if(!(hotspotfd_isValidIpAddress(old_wan_ipv4))) {
+
+            if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "current_wan_ipaddr" , buf, sizeof(buf))) {
+                 CcspTraceError(("sysevent_get failed to get current_wan_ipaddr\n"));
+            }
+
+            if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv4addr", buf, 0)){
+                CcspTraceError(("sysevent_set failed to set old_wan_ipv4addr\n"));
+            }
+
+            if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv4addr" , old_wan_ipv4, sizeof(old_wan_ipv4))) {
+                 CcspTraceError(("sysevent_get failed to get current_wan_ipaddr\n"));
+            }
+
+            CcspTraceInfo(("Updated old_wan_ipv4addr is  %s\n", old_wan_ipv4));
+        }
+
+        if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv6addr" , old_wan_ipv6, sizeof(old_wan_ipv6))) {
+             CcspTraceError(("sysevent_get failed to get wan6_ipaddr\n"));
+        }
+
+        CcspTraceInfo(("old_wan_ipv6addr is  %s\n", old_wan_ipv6));
+
+        if(!(hotspotfd_isValidIpAddress(old_wan_ipv6))) {
+
+            if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "wan6_ipaddr" , buf, sizeof(buf))) {
+                 CcspTraceError(("sysevent_get failed to get wan6_ipaddr\n"));
+            }
+
+            if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv6addr", buf, 0)){
+                CcspTraceError(("sysevent_set failed to set old_wan_ipv6addr\n"));
+            }
+
+            if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv6addr" , old_wan_ipv6, sizeof(old_wan_ipv6))) {
+                 CcspTraceError(("sysevent_get failed to get wan6_ipaddr\n"));
+            }
+
+            CcspTraceInfo(("Updated old_wan_ipv6addr is  %s\n", old_wan_ipv6));
+        }
+
 #ifdef FEATURE_SUPPORT_MAPT_NAT46
         // Keep Alive Interface
         if ((status = sysevent_get(sysevent_fd_gs, sysevent_token_gs, SYSEVENT_MAPT_CONFIG_FLAG, buf, sizeof(buf)))) {

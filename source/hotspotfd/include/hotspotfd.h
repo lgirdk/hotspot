@@ -67,6 +67,8 @@
 #define khotspotfd_enable                   "hotspotfd-enable"
 #define khotspotfd_log_enable               "hotspotfd-log-enable"
 #define khotspotfd_wan_status               "wan-status"
+#define khotspotfd_current_wan_ipaddr_v4    "current_wan_ipaddr"
+#define khotspotfd_current_wan_ipaddr_v6    "wan6_ipaddr"
 
 #define kHotspotfd_primary_len                  kMax_IPAddressLength             
 #define khotspotfd_secondary_len                kMax_IPAddressLength           

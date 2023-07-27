@@ -1134,3 +1134,14 @@ int hotspot_wan_failover(bool remote_wan_enabled){
     }
     return 0;
 }
+
+void recreate_tunnel(){
+    char   cmdBuf[1024];
+    int    offset = 0;
+    offset += snprintf(cmdBuf+offset, sizeof(cmdBuf) - offset, "%s %s ;", IP_DEL, GRE_IFNAME);
+    CcspTraceInfo(("HOTSPOT_LIB : Buffer for deleting gre tunnel = %s %d\n", cmdBuf, offset));
+    if (offset){
+        sys_execute_cmd(cmdBuf);
+    }
+    jansson_rollback_tunnel_info();
+}
