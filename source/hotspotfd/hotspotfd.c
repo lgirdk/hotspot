@@ -1320,51 +1320,64 @@ static void *hotspotfd_sysevent_handler(void *data)
                  CcspTraceInfo(("current_wan_ipaddr is changed to %s\n", val));
                  int ipaddr_length = strlen(val);
                  char current_EP[kMax_IPAddressLength];
+                 memset(current_EP, '\0', sizeof(current_EP));
                  if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "gre_current_endpoint" , current_EP, sizeof(current_EP))) {
                     CcspTraceError(("sysevent_get failed to get gre_current_endpoint\n"));
                  }
-                 if(ipAddress_version(current_EP) == 4){
-                    if((strncmp(val, "0.0.0.0", ipaddr_length) == 0))
-                    {
-                         CcspTraceInfo(("current_wan_ipaddr is %s\n", val));
-                    }
-                    else if((strncmp(val,old_wan_ipv4, ipaddr_length) == 0))
-                    {
-                         CcspTraceInfo(("current_wan_ipaddr and old_wan_ipv4 are same \n"));
-                    }
-                    else
-                    {
-                         CcspTraceInfo(("current_wan_ipaddr and old_wan_ipv4 are not same \n"));
-                         strcpy_s(old_wan_ipv4, sizeof(old_wan_ipv4), val);
-                         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv4addr", old_wan_ipv4, 0)){
-                            CcspTraceError(("sysevent_set failed to set old_wan_ipv4addr\n"));
-                        }
-                        recreate_tunnel();
-                    }
+                 if (current_EP[0] == '\0' || strncmp("dummy_EP", current_EP, strlen("dummy_EP")) == 0) {
+                    CcspTraceInfo(("Tunnels are down previously, no need to recreate\n"));
                  }
-
+                 else
+                 {
+                     if(ipAddress_version(current_EP) == 4){
+                         if((strncmp(val, "0.0.0.0", ipaddr_length) == 0))
+                         {
+                             CcspTraceInfo(("current_wan_ipaddr is %s\n", val));
+                         }
+                         else if((strncmp(val,old_wan_ipv4, ipaddr_length) == 0))
+                         {
+                             CcspTraceInfo(("current_wan_ipaddr and old_wan_ipv4 are same \n"));
+                         }
+                         else
+                         {
+                             CcspTraceInfo(("current_wan_ipaddr and old_wan_ipv4 are not same \n"));
+                             strcpy_s(old_wan_ipv4, sizeof(old_wan_ipv4), val);
+                             if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv4addr", old_wan_ipv4, 0)){
+                                 CcspTraceError(("sysevent_set failed to set old_wan_ipv4addr\n"));
+                             }
+                             recreate_tunnel();
+                         }
+                     }
+                 }
             } else if (ret_value == HOTSPOTFD_CURRENT_WAN_IPADDR_V6) {
                  CcspTraceInfo(("wan6_ipaddr is changed to %s\n", val));
                  int ipaddr_length = strlen(val);
                  char current_EP[kMax_IPAddressLength];
+                 memset(current_EP, '\0', sizeof(current_EP));
                  if (sysevent_get(sysevent_fd_gs, sysevent_token_gs, "gre_current_endpoint" , current_EP, sizeof(current_EP))) {
                     CcspTraceError(("sysevent_get failed to get gre_current_endpoint\n"));
                  }
-                 if(ipAddress_version(current_EP) == 6){
+                 if (current_EP[0] == '\0' || strncmp("dummy_EP", current_EP, strlen("dummy_EP")) == 0) {
+                    CcspTraceInfo(("Tunnels are down previously, no need to recreate\n"));
+                 }
+                 else
+                 {
+                     if(ipAddress_version(current_EP) == 6){
 
-                    if((strncmp(val,old_wan_ipv6, ipaddr_length) == 0))
-                    {
-                         CcspTraceInfo(("wan6_ipaddr and old_wan_ipv6 are same \n"));
-                    }
-                    else
-                    {
-                         CcspTraceInfo(("wan6_ipaddr and old_wan_ipv6 are not same \n"));
-                         strcpy_s(old_wan_ipv6, sizeof(old_wan_ipv6), val);
-                         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv6addr", old_wan_ipv6, 0)){
-                            CcspTraceError(("sysevent_set failed to set old_wan_ipv6addr\n"));
+                        if((strncmp(val,old_wan_ipv6, ipaddr_length) == 0))
+                        {
+                             CcspTraceInfo(("wan6_ipaddr and old_wan_ipv6 are same \n"));
                         }
-                        recreate_tunnel();
-                    }
+                        else
+                        {
+                             CcspTraceInfo(("wan6_ipaddr and old_wan_ipv6 are not same \n"));
+                             strcpy_s(old_wan_ipv6, sizeof(old_wan_ipv6), val);
+                             if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, "old_wan_ipv6addr", old_wan_ipv6, 0)){
+                                CcspTraceError(("sysevent_set failed to set old_wan_ipv6addr\n"));
+                             }
+                             recreate_tunnel();
+                        }
+                     }
                  }
             }
 
