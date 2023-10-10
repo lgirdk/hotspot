@@ -47,6 +47,9 @@
 #define PARAM_COUNT   3
 #define SIZE_OF_IP    40
 #define SIZE_CMD      48
+#define IFLIST_SIZE          256
+#define INTERFACE_EXIST      0
+#define INTERFACE_NOT_EXIST  1
 
 
 #define VAP_NAME_4             "hotspot_open_2g"
@@ -136,6 +139,28 @@ typedef struct{
 #endif
       int          queue_num;
 }vlanSyncData_s;
+
+typedef struct {
+    bool isFirst;
+    bool gre_enable;
+    char primaryEP[SIZE_OF_IP];
+    char secondaryEP[SIZE_OF_IP];
+    int Vlans[MAX_VAP];
+} tunnel_params;
+
+typedef enum {
+      GRE_ENABLE_CHANGE = 1 << 0,
+      PRIMARY_EP_CHANGED = 1 << 1,
+      SECONDARY_EP_CHANGED = 1 << 2,
+      VLAN_CHANGE_BASE = 1 << 3,
+      VLAN_CHANGE_1 = VLAN_CHANGE_BASE << 1,
+      VLAN_CHANGE_2 = VLAN_CHANGE_BASE << 2,
+      VLAN_CHANGE_3 = VLAN_CHANGE_BASE << 3,
+      VLAN_CHANGE_4 = VLAN_CHANGE_BASE << 4,
+      VLAN_CHANGE_5 = VLAN_CHANGE_BASE << 5,
+      VLAN_CHANGE_6 = VLAN_CHANGE_BASE << 6
+}eTunnel_Params_Changed;
+
 /**/
 void firewall_restart();
 bool jansson_rollback_tunnel_info();
@@ -148,6 +173,7 @@ char* getIpv6Address();
 int create_tunnel(char *gre_primary_endpoint);
 int hotspot_sysevent_enable_param();
 bool get_ssid_enable(int ssidIdx);
+int checkGreInterface_Exist(int vlan_ID, char *bridge_name);
 bool prevalidateHotspotBlob(tunneldoc_t *pGreTunnelData);
 int  validateIpAddress(char *ipAddress);
 int ipAddress_version(char *ipAddress);

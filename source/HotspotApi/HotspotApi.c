@@ -22,6 +22,7 @@
 #include "webconfig_framework.h"
 #include "ccsp_psm_helper.h"
 #include "ansc_platform.h"
+#include "safec_lib_common.h"
 
 #include <telemetry_busmessage_sender.h>
 
@@ -42,6 +43,16 @@ int      vlanIdList[MAX_VAP];
 static pErr execRetVal = NULL;
 extern vlanSyncData_s gVlanSyncData[];
 callbackHotspot gCallbackSync = NULL;
+
+tunnel_params oldTunnelData = {
+    .isFirst = true,
+    .gre_enable = false,
+    .primaryEP = {0},
+    .secondaryEP = {0},
+    .Vlans = {0}
+};
+
+tunneldoc_t     *tempTunnelData = NULL;
 
 /**************************************************************************/
 /**************************************************************************/
@@ -468,13 +479,25 @@ static void addBrideAndVlan(int vlanIndex, int wan_vlan){
      CcspTraceInfo(("HOTSPOT_LIB : Adding Bride and vlan configuration: vlan id: %d vlanIndex: %d\n",
              wan_vlan, vlanIndex));
      memset(cmdBuf, '\0', sizeof(cmdBuf));
-
      offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
                                 "brctl addbr %s; ", gVlanSyncData[vlanIndex].bridgeName);    
      offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
                                 "ifconfig %s up; ", gVlanSyncData[vlanIndex].bridgeName);    
+
+     if((oldTunnelData.Vlans[vlanIndex] !=0) && (oldTunnelData.Vlans[vlanIndex] != wan_vlan)){
+         CcspTraceInfo(("HOTSPOT_LIB : Deleting Vlan interface gretap0.%d ...\n",oldTunnelData.Vlans[vlanIndex]));
+         offset += snprintf(cmdBuf+offset,
+                                sizeof(cmdBuf) - offset,
+                                "ip link del gretap0.%d; ", oldTunnelData.Vlans[vlanIndex]);
+         #if defined (_ARRIS_XB6_PRODUCT_REQ_)
+         CcspTraceInfo(("HOTSPOT_LIB : Deleting Vlan interface nmoca0.%d ...\n",oldTunnelData.Vlans[vlanIndex]));
+         offset += snprintf(cmdBuf+offset,
+                                sizeof(cmdBuf) - offset,
+                                "ip link del nmoca0.%d; ", oldTunnelData.Vlans[vlanIndex]);
+         #endif
+     }
 
      offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
@@ -625,7 +648,7 @@ bool get_ssid_enable(int ssidIdx)
 
     if(valStructs)
     {    
-          CcspTraceInfo(("Retrieving ssid info ssid idx= ssidIdx val = %s\n",valStructs[0]->parameterValue));
+          CcspTraceInfo(("Retrieving ssid info for ssid %d = %s\n", ssidIdx, valStructs[0]->parameterValue));
           retVal = (strcmp( valStructs[0]->parameterValue, "true") == 0) ? true : false;
     }
     free_parameterValStruct_t(bus_handle, valNum, valStructs);
@@ -720,10 +743,56 @@ bool prevalidateHotspotBlob(tunneldoc_t *pGreTunnelData)
     return true;
 }
 
+int compareTunnelConfig(){
+
+    CcspTraceInfo(("HOTSPOT_LIB : Entering  %s\n", __FUNCTION__));
+    int return_status = 0;
+    int ind = -1;
+    errno_t rc = -1;
+
+    if(oldTunnelData.isFirst == true){
+       CcspTraceInfo(("HOTSPOT_LIB : All the parameters are considered as changed, as this the first time.\n"));
+#if defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
+       return_status = PRIMARY_EP_CHANGED | SECONDARY_EP_CHANGED | VLAN_CHANGE_1 | VLAN_CHANGE_2 | VLAN_CHANGE_3 | VLAN_CHANGE_4 | VLAN_CHANGE_5 | VLAN_CHANGE_6;
+       return return_status;
+#else
+       return_status = PRIMARY_EP_CHANGED | SECONDARY_EP_CHANGED | VLAN_CHANGE_1 | VLAN_CHANGE_2 | VLAN_CHANGE_3 | VLAN_CHANGE_4;
+       return return_status;
+#endif
+    }
+
+    if (oldTunnelData.gre_enable != tempTunnelData->entries->gre_enable) {
+        return_status |= GRE_ENABLE_CHANGE;
+        CcspTraceInfo(("HOTSPOT_LIB : gre_enable changed: %d -> %d\n", oldTunnelData.gre_enable, tempTunnelData->entries->gre_enable));
+    }
+
+    rc = strcmp_s(oldTunnelData.primaryEP, sizeof(oldTunnelData.primaryEP), tempTunnelData->entries->gre_primary_endpoint, &ind);
+    ERR_CHK(rc);
+    if ((ind != 0) && (rc == EOK)) {
+        return_status |= PRIMARY_EP_CHANGED;
+        CcspTraceInfo(("HOTSPOT_LIB : gre_primary_endpoint changed: %s -> %s\n", oldTunnelData.primaryEP, tempTunnelData->entries->gre_primary_endpoint));
+    }
+
+    rc = strcmp_s(oldTunnelData.secondaryEP, sizeof(oldTunnelData.secondaryEP), tempTunnelData->entries->gre_sec_endpoint, &ind);
+    ERR_CHK(rc);
+    if ((ind != 0) && (rc == EOK)) {
+        return_status |= SECONDARY_EP_CHANGED;
+        CcspTraceInfo(("HOTSPOT_LIB : gre_sec_endpoint changed: %s -> %s\n", oldTunnelData.secondaryEP, tempTunnelData->entries->gre_sec_endpoint));
+    }
+    for (int i = 0; i < tempTunnelData->entries->table_param->entries_count; i++){
+        if (oldTunnelData.Vlans[i] != tempTunnelData->entries->table_param->entries[i].wan_vlan) {
+            return_status |= VLAN_CHANGE_BASE << (i + 1);
+            CcspTraceInfo(("HOTSPOT_LIB : vlan_interface_%d changed: %d -> %d\n", i+1, oldTunnelData.Vlans[i], tempTunnelData->entries->table_param->entries[i].wan_vlan));
+    }
+    }
+    return return_status;
+
+}
+
 pErr setHotspot(void* const network){
 
      //greTunnelData_s *pGreTunnelData = NULL;
-     tunneldoc_t     *pGreTunnelData = NULL;          
+     tunneldoc_t     *pGreTunnelData = NULL;
      int    retValue = 0;
      int    index = 0;
      int    vlanid = 0;
@@ -732,6 +801,8 @@ pErr setHotspot(void* const network){
      int   file_status = 0;
      char val[16] = {0};
      bool secTunInvalid = false;
+     bool epChanged = false;
+     int paramsChanged;
 //Check if this is the very first webconfig on this device and if legacy 
 //hotspot was enabled , if so store the previous configuration for the rollback 
 //Check with Wifi team also , if they woudl be able to rollback to previous
@@ -753,6 +824,8 @@ pErr setHotspot(void* const network){
      }
 
      pGreTunnelData = (tunneldoc_t *)network;
+     tempTunnelData = (tunneldoc_t *)malloc(sizeof(tunneldoc_t));
+     memcpy(tempTunnelData, pGreTunnelData, sizeof(tunneldoc_t));
  
      PsmGet(PSM_HOTSPOT_ENABLE, val, sizeof(val));
      file_status = access(N_HOTSPOT_JSON, F_OK);
@@ -777,6 +850,20 @@ pErr setHotspot(void* const network){
      
             CcspTraceInfo(("HOTSPOT_LIB : Previously Xfinity was disabled, no need to prepare rollback data  %s \n", __FUNCTION__));
           }
+     }
+     paramsChanged = compareTunnelConfig();
+     CcspTraceInfo(("HOTSPOT_LIB : return status of the params changed...  %d \n", paramsChanged));
+
+     if(paramsChanged == 0){
+         CcspTraceInfo(("HOTSPOT_LIB : Nothing is changed from tunnel side, No need to recreate...\n"));
+         jansson_store_tunnel_info(pGreTunnelData);
+         gXfinityEnable = oldTunnelData.gre_enable;
+         memset(cmdBuf, '\0', sizeof(cmdBuf));
+         CcspTraceInfo(("HOTSPOT_LIB : Creating /tmp/.hotspot_blob_inprogress\n"));
+         strncpy(cmdBuf, "touch /tmp/.hotspot_blob_inprogress", SIZE_CMD);
+         sys_execute_cmd(cmdBuf);
+         execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
+         return execRetVal;
      }
 
      if(true == pGreTunnelData->entries->gre_enable){
@@ -817,28 +904,39 @@ pErr setHotspot(void* const network){
          strncpy(cmdBuf, "touch /tmp/.hotspot_blob_inprogress", SIZE_CMD);
          sys_execute_cmd(cmdBuf);
     /* Deleting existing Tunnels*/
-         deleteVaps();
-
-         create_tunnel( pGreTunnelData->entries->gre_primary_endpoint); 
-
+         //deleteVaps();
+         if ((paramsChanged & PRIMARY_EP_CHANGED) || (paramsChanged & SECONDARY_EP_CHANGED) || (paramsChanged & GRE_ENABLE_CHANGE)){
+             epChanged = true;
+             if((oldTunnelData.isFirst == false) && (oldTunnelData.gre_enable == true)){
+                 memset(cmdBuf, '\0', sizeof(cmdBuf));
+                 CcspTraceInfo(("HOTSPOT_LIB : deleting the gre tunnel...\n"));
+                 strncpy(cmdBuf, "ip link del gretap0", SIZE_CMD);
+                 sys_execute_cmd(cmdBuf);
+             }
+             create_tunnel( pGreTunnelData->entries->gre_primary_endpoint);
+         }
          CcspTraceInfo(("HOTSPOT_LIB : Number of VAP received in blob: %zu \n", pGreTunnelData->entries->table_param->entries_count));
          memset(vlanIdList, '\0', sizeof(vlanIdList));
 
          for(index = 0; index < pGreTunnelData->entries->table_param->entries_count; index++){
               if(true == pGreTunnelData->entries->table_param->entries[index].enable){
+                       vapBitMask |=  gVlanSyncData[index].bitVal;
 
-                   vapBitMask |=  gVlanSyncData[index].bitVal;
-
-                   vlanid = pGreTunnelData->entries->table_param->entries[index].wan_vlan;
+                       vlanid = pGreTunnelData->entries->table_param->entries[index].wan_vlan;
 //For now keeping it as 200 similar to AC. but this needs to be tweaked or 
 //after discussing since l2sd0.xxx may get created in XB3 overlapping the 112,113,1060 vlans
 //for the pods.
 //check for the return , if some bridges fails, we must return failure
 //else wifi will proceed with creating the vap but actually bridges doesnt 
 //exists
-                   vlanIdList[index] = vlanid;
-                   configHotspotBridgeVlan(pGreTunnelData->entries->table_param->entries[index].vap_name, vlanid);
-                   retValue = update_bridge_config( getHotspotVapIndex(pGreTunnelData->entries->table_param->entries[index].vap_name));
+                       vlanIdList[index] = vlanid;
+                   if ((paramsChanged & (VLAN_CHANGE_BASE << (index + 1))) || (epChanged)){
+                       configHotspotBridgeVlan(pGreTunnelData->entries->table_param->entries[index].vap_name, vlanid);
+                       retValue = update_bridge_config( getHotspotVapIndex(pGreTunnelData->entries->table_param->entries[index].vap_name));
+                   }
+                   else{
+                       continue;
+                   }
               }
          }
          jansson_store_tunnel_info(pGreTunnelData);
@@ -916,6 +1014,9 @@ int deleteHotspot(){
          CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
          strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
          sys_execute_cmd(cmdBuf);
+         free(tempTunnelData);
+         tempTunnelData = NULL;
+
          return ROLLBACK_SUCCESS;
        }
        else{
@@ -925,8 +1026,63 @@ int deleteHotspot(){
              CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
              strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
              sys_execute_cmd(cmdBuf);
+             free(tempTunnelData);
+             tempTunnelData = NULL;
              return BLOB_EXEC_FAILURE;
        }
+}
+
+void populate_old_params_to_structure(){
+    CcspTraceInfo(("HOTSPOT_LIB : Entering  %s\n", __FUNCTION__));
+    oldTunnelData.gre_enable = tempTunnelData->entries->gre_enable;
+    strncpy(oldTunnelData.primaryEP, tempTunnelData->entries->gre_primary_endpoint, sizeof(oldTunnelData.primaryEP)-1);
+    oldTunnelData.primaryEP[sizeof(oldTunnelData.primaryEP)-1] = '\0';
+    strncpy(oldTunnelData.secondaryEP, tempTunnelData->entries->gre_sec_endpoint, sizeof(oldTunnelData.secondaryEP)-1);
+    oldTunnelData.secondaryEP[sizeof(oldTunnelData.secondaryEP)-1] = '\0';
+    for(int i =0; i<MAX_VAP; i++){
+        oldTunnelData.Vlans[i] = tempTunnelData->entries->table_param->entries[i].wan_vlan;
+    }
+    oldTunnelData.isFirst = false;
+}
+
+int checkGreInterface_Exist(int vlan_ID, char *bridge_name)
+{
+	FILE *fp = NULL;
+	int ret =0;
+	char *token = NULL;
+    char   gre_Interface[24] = {0};
+    memset(gre_Interface, '\0', sizeof(gre_Interface));
+    snprintf(gre_Interface, sizeof(gre_Interface), "%s.%d", GRE_IFNAME, vlan_ID);
+    char syscmd[1024] = {'\0'};
+	char if_list[IFLIST_SIZE] = {'\0'};
+        memset(syscmd, 0, sizeof(syscmd));
+        snprintf(syscmd, sizeof(syscmd), "brctl show %s | sed '1d' | awk '{print $NF}' | grep %s | tr '\n' ' ' ",bridge_name, gre_Interface);
+	fp = popen(syscmd, "r");
+
+	if ( fp != NULL )
+	{
+		fgets(if_list,IFLIST_SIZE-1,fp);
+		if_list[strlen(if_list)-1] = '\0';
+		ret = pclose(fp);
+		if(ret !=0)
+		{
+				CcspTraceError(("HOTSPOT_LIB : Error in closing pipe ret val [%d] \n",ret));
+		}
+	}
+	if(strlen(if_list) > 1)
+	{
+		token = strtok(if_list, " ");
+		while(token != NULL)
+		{
+			if(strcmp(token, gre_Interface) == 0)
+			{
+				CcspTraceInfo(("HOTSPOT_LIB : %s is attached to %s\n",gre_Interface, bridge_name));
+				return INTERFACE_EXIST;
+			}
+		}
+	}
+	CcspTraceError(("HOTSPOT_LIB : %s is not attached to %s\n",gre_Interface, bridge_name));
+	return INTERFACE_NOT_EXIST;
 }
 
 int confirmVap(){
@@ -946,6 +1102,12 @@ int confirmVap(){
 
 #if !defined(_COSA_INTEL_XB3_ARM_)
     if(gXfinityEnable) {
+        for(int i=0; i<MAX_VAP; i++){
+            if(checkGreInterface_Exist(vlanIdList[i], gVlanSyncData[i].bridgeName)){
+                CcspTraceError(("HOTSPOT_LIB : %s bridge doesn't have gre_Interface\n", gVlanSyncData[i].bridgeName));
+            }
+            CcspTraceInfo(("HOTSPOT_LIB : %s have gre_Interface\n", gVlanSyncData[i].bridgeName));
+        }
         for(index = 0; index < MAX_VAP; index++){
             if (gVlanSyncData[index].bitVal & vapBitMask){
 
@@ -1037,7 +1199,9 @@ int confirmVap(){
      memset(Buf, '\0', sizeof(Buf));
      snprintf(Buf, sizeof(Buf), "touch /tmp/.hotspot_blob_executed");
      sys_execute_cmd(Buf);
-
+     populate_old_params_to_structure();
+     free(tempTunnelData);
+     tempTunnelData = NULL;
      return 0;
 }
 
