@@ -2110,6 +2110,17 @@ Try_primary:
 
 					CcspTraceInfo(("Primary GRE Tunnel Endpoint :%s is not alive Switching to Secondary Endpoint :%s\n", gpPrimaryEP,gpSecondaryEP));
 
+                    if(ssid_reset_mask == 0)
+                    {
+                         if(TRUE == get_validate_ssid())
+                         {
+                             CcspTraceInfo(("SSID values are updated successfully \n"));
+                         }
+                         else
+                         {
+                             CcspTraceInfo(("SSID values not are updated successfully \n"));
+                         }
+                    }
                     if (gSecStateIsDown && gPriStateIsDown && gBothDnFirstSignal) {
 
                         gBothDnFirstSignal = false;
