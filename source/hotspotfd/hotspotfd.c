@@ -185,6 +185,8 @@ static char old_wan_ipv6[kMax_IPAddressLength];
 #ifdef WAN_FAILOVER_SUPPORTED
 extern int hotspot_wan_failover(bool isRemoteWANEnabled);
 extern int PsmGet(const char *param, char *value, int size);
+static pthread_t rbus_tid;
+rbusHandle_t handle;
 #endif
 
 static pthread_t dhcp_snooper_tid;
@@ -1926,6 +1928,32 @@ static void HotspotTunnelEventHandler(
 }
 #endif
 
+#ifdef WAN_FAILOVER_SUPPORTED
+void  *handle_rbusSubscribe() {
+    int   ret   = 0;
+    bool retry_again = true;
+    int retry_count = 0;
+
+    while (retry_again == true && retry_count < 10) {
+        ret = rbusEvent_Subscribe(handle, "Device.X_RDK_WanManager.CurrentActiveInterface", HotspotTunnelEventHandler, NULL, 0);
+        if(ret != RBUS_ERROR_SUCCESS)
+        {
+          CcspTraceError(("HotspotTunnelEvent: rbusEvent_Subscribe failed: %d. Retrying for 10 times...\n", ret));
+          retry_count++;
+          retry_again = true;
+        } else {
+          CcspTraceInfo(("HotspotTunnelEvent: rbusEvent_Subscribe success: %d\n", ret));
+          retry_again = false;
+        }
+    }
+    if (retry_count >= 10) {
+        CcspTraceError(("HotspotTunnelEvent: rbusEvent_Subscribe failed: %d. Returning from %s\n", ret, __FUNCTION__));
+        return NULL;
+    }
+    return NULL;
+}
+#endif
+
 void hotspot_start()
 {
     unsigned int keepAliveThreshold = 0;
@@ -1978,7 +2006,6 @@ void hotspot_start()
     hotspotfd_log();
 
 #ifdef WAN_FAILOVER_SUPPORTED
-    rbusHandle_t handle;
 
     ret = rbus_open(&handle, "HotspotTunnelEvent");
     if(ret != RBUS_ERROR_SUCCESS)
@@ -1986,13 +2013,8 @@ void hotspot_start()
         CcspTraceError(("HotspotTunnelEvent : rbus_open failed: %d\n", ret));
         return;
     }
+    pthread_create(&rbus_tid, NULL, handle_rbusSubscribe, NULL);
 
-    ret = rbusEvent_Subscribe(handle, "Device.X_RDK_WanManager.CurrentActiveInterface", HotspotTunnelEventHandler, NULL, 0);
-    if(ret != RBUS_ERROR_SUCCESS)
-    {
-        CcspTraceError(("HotspotTunnelEvent: rbusEvent_Subscribe failed: %d\n", ret));
-        return;
-    }
 #endif
 
     if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kHotspotfd_tunnelEP, kDefault_DummyEP, 0))
