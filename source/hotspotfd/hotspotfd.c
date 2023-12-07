@@ -1972,6 +1972,7 @@ void hotspot_start()
 
 	gKeepAliveEnable = true;
     bool switchedFromSecondary = false;
+    char telemetry_buf[128] = {'\0'};
 #ifdef __HAVE_SYSEVENT__
     sysevent_fd = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, kHotspotfd_events, &sysevent_token);
 	sysevent_fd_gs = sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, "hotspotfd-gs", &sysevent_token_gs);
@@ -2070,6 +2071,9 @@ Try_primary:
 
 		    CcspTraceInfo(("Create Primary GRE Tunnel with endpoint:%s\n", gpPrimaryEP));
 		    t2_event_d("SYS_INFO_Create_GRE_Tunnel", 1);
+                    memset(telemetry_buf, 0, sizeof(telemetry_buf));
+                    snprintf(telemetry_buf, sizeof(telemetry_buf), "%s-Primary", gpPrimaryEP);
+                    t2_event_s("XWIFI_Active_Tunnel", telemetry_buf);
 
 
                     if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, 
@@ -2138,6 +2142,9 @@ Try_primary:
                     gPriStateIsDown = true;
 
 					CcspTraceInfo(("Primary GRE Tunnel Endpoint :%s is not alive Switching to Secondary Endpoint :%s\n", gpPrimaryEP,gpSecondaryEP));
+                    memset(telemetry_buf, 0, sizeof(telemetry_buf));
+                    snprintf(telemetry_buf, sizeof(telemetry_buf), "%s-Secondary", gpSecondaryEP);
+                    t2_event_s("XWIFI_Active_Tunnel", telemetry_buf);
 
                     if(ssid_reset_mask == 0)
                     {
@@ -2216,6 +2223,9 @@ Try_secondary:
                     keepAliveThreshold = 0;
                     secondaryKeepAlives = 0;
 					CcspTraceInfo(("Max. Secondary EP time:%d exceeded. Switching to Primary EP\n", gSecondaryMaxTime));
+                    memset(telemetry_buf, 0, sizeof(telemetry_buf));
+                    snprintf(telemetry_buf, sizeof(telemetry_buf), "%s-Primary", gpPrimaryEP);
+                    t2_event_s("XWIFI_Active_Tunnel", telemetry_buf);
 
                     // TODO: Do we just destroy this tunnel and move over
                     // to the primary? What if the Primary is down then we switched
@@ -2310,6 +2320,8 @@ Try_secondary:
 
                             CcspTraceError(("sysevent set %s failed on secondary\n", kHotspotfd_tunnelEP));
                         }
+                        t2_event_s("XWIFI_Active_Tunnel", "No Tunnel");
+
 			/*Signal wifi module for tunnel down */
                         notify_tunnel_status("Down");
 			ret = CcspBaseIf_SendSignal_WithData(bus_handle, "TunnelStatus", "TUNNEL_DOWN");

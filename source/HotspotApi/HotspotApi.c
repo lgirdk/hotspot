@@ -23,6 +23,8 @@
 #include "ccsp_psm_helper.h"
 #include "ansc_platform.h"
 
+#include <telemetry_busmessage_sender.h>
+
 /**************************************************************************/
 /*      GLOBAL and STATIC  VARIABLES                                      */
 /**************************************************************************/
@@ -465,7 +467,6 @@ static void addBrideAndVlan(int vlanIndex, int wan_vlan){
 
      CcspTraceInfo(("HOTSPOT_LIB : Adding Bride and vlan configuration: vlan id: %d vlanIndex: %d\n",
              wan_vlan, vlanIndex));
-
      memset(cmdBuf, '\0', sizeof(cmdBuf));
 
      offset += snprintf(cmdBuf+offset, 
@@ -526,6 +527,19 @@ static void addBrideAndVlan(int vlanIndex, int wan_vlan){
      CcspTraceInfo(("HOTSPOT_LIB : Buffer 2 gre add = %s %d\n", cmdBuf, offset));
      if (offset)
         sys_execute_cmd(cmdBuf);
+
+     if(vlanIndex == VLAN_INDEX_1){
+         t2_event_d("XWIFI_VLANID_6_split", wan_vlan);
+     }
+     if(vlanIndex == VLAN_INDEX_3){
+         t2_event_d("XWIFI_VLANID_10_split", wan_vlan);
+     }
+     if(vlanIndex == VLAN_INDEX_4){
+         t2_event_d("XWIFI_VLANID_19_split", wan_vlan);
+     }
+     if(vlanIndex == VLAN_INDEX_5){
+         t2_event_d("XWIFI_VLANID_21_split", wan_vlan);
+     }
 }
 
 int getHotspotVapIndex(char *vapName) {
