@@ -54,6 +54,7 @@
 #include "ansc_platform.h"
 #include <telemetry_busmessage_sender.h>
 #include "safec_lib_common.h"
+#include "libHotspot.h"
 
 
 #define mylist_safe(p, q, h) \
@@ -71,6 +72,7 @@
 
 #define mylist_entry(p, t, m) \
          cof(p, t, m)
+
 
 static inline void SET_LIST_HEAD(struct mylist_head *l)
 {
@@ -129,6 +131,8 @@ static enum agent_relay_mode_t agent_relay_mode = forward_and_replace;
 
 static char g_cHostnameForQueue[kSnoop_MaxCircuitIDs][kSnooper_MaxHostNameLen];
 static char g_cInformIpForQueue[kSnoop_MaxCircuitIDs][INET_ADDRSTRLEN];
+extern vlanSyncData_s gVlanSyncData[];
+extern int gVlanSyncDataSize;
 
 #if 0
 static void snoop_setDhcpRelayAgentAddAgentOptions(int aao)
@@ -1306,18 +1310,17 @@ void *dhcp_snooper_init(void *data)
 
     for(i=gSnoopFirstQueueNumber; i < gSnoopNumberOfQueues + gSnoopFirstQueueNumber; i++) {
 
+      if (i > gVlanSyncDataSize)
+          break;
+
         // Pass the queue number to the packet handler
         gPriv_data[j] = i;
-        //Changing nf queue value for new ssid
-        if ( i == 5 ){
-          i = 45;
-        }
         // Install a callback on each of the iptables NFQUEUE queues
-        if (!(myQueue = nfq_create_queue(nfqHandle,  i, &snoop_packetHandler, &gPriv_data[j++]))) {
+        if (!(myQueue = nfq_create_queue(nfqHandle,  gVlanSyncData[i-1].queue_num, &snoop_packetHandler, &gPriv_data[j++]))) {
             CcspTraceError(("Error in nfq_create_queue(): %p\n", myQueue));
             exit(1);
         } else {
-            msg_debug("Registered packet handler for queue %d\n", i);
+            msg_debug("Registered packet handler for queue %d\n", gVlanSyncData[i-1].queue_num);
 
             // Turn on packet copy mode
             if ((status = nfq_set_mode(myQueue, NFQNL_COPY_PACKET, 0xffff)) < 0) {

@@ -22,6 +22,8 @@
 #include "libHotspotApi.h"
 #include "webconfig_framework.h"
 
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
+
 /**************************************************************************/
 /*      GLOBAL and STATIC  VARIABLES                                      */
 /**************************************************************************/
@@ -39,8 +41,8 @@ vlanSyncData_s gVlanSyncData[] = {
      {VAP_NAME_5, "wl1.3", "brlan3", 0x2, 6, 2},
      {VAP_NAME_8, "wl0.5", "brlan4", 0x4, 9, 3},
      {VAP_NAME_9, "wl1.5", "brlan5", 0x8, 10, 4},
-     {VAP_NAME_11, "wl2.3", "bropen6g", 0x16, 19, 45},
-     {VAP_NAME_12, "wl2.5", "brsecure6g", 0x32, 21, 6}
+     {VAP_NAME_11, "wl2.3", "bropen6g", 0x16, 19, 46},
+     {VAP_NAME_12, "wl2.5", "brsecure6g", 0x32, 21, 47}
 };
 #elif defined (_XB7_PRODUCT_REQ_)|| defined (_XF3_PRODUCT_REQ_)
 vlanSyncData_s gVlanSyncData[] = {
@@ -79,3 +81,5 @@ vlanSyncData_s gVlanSyncData[] = {
      {VAP_NAME_9, "NULL", "NULL", 0x8, 0, 0}
 };
 #endif
+
+int gVlanSyncDataSize = ARRAY_SIZE(gVlanSyncData);
