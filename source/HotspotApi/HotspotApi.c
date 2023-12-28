@@ -152,11 +152,6 @@ int gre_sysevent_syscfg_init()
 int update_bridge_config(int index) {
     int retVal = 0;
     char rule[1024]={0}, query[500]={0}, param[500]={0};
-#if defined(_COSA_INTEL_XB3_ARM_)
-    char liveNetBuf[300]={0};
-    char outBuf[300]={0};
-    int len = 0;
-#endif
 
     CcspTraceInfo(("HOTSPOT_LIB : Entering function %s to set sysevent parameters Index=%d\n",
         __FUNCTION__, index));
@@ -170,24 +165,6 @@ int update_bridge_config(int index) {
         snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
         sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
         sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
-
-#if defined(_COSA_INTEL_XB3_ARM_)
-        sysevent_get(gSyseventfd, gSysevent_token, "multinet-instances", liveNetBuf, sizeof(liveNetBuf));
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - sysevent live buff =%s\n", __FUNCTION__, liveNetBuf));
-        strcpy(outBuf, liveNetBuf);
-        len = strlen(outBuf);
-        snprintf(outBuf + len, sizeof(outBuf) - len, "%s%d", len ? " " : "", gVlanSyncData[index].instance);
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - sysevent parameter Index=%s\n", __FUNCTION__, outBuf));
-        sysevent_set(gSyseventfd, gSysevent_token, "multinet-instances", outBuf,0);
-        memset(param, '\0', sizeof (param));
-        snprintf(param, sizeof(param), "multinet_%d-localready", gVlanSyncData[index].instance);
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - multinet local ready =%s\n", __FUNCTION__, param));
-        sysevent_set(gSyseventfd, gSysevent_token, param, "1", 0);
-        memset(param, '\0', sizeof (param));
-        snprintf(param, sizeof(param), "multinet_%d-name", gVlanSyncData[index].instance);
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - multinet name =%s\n", __FUNCTION__, param));
-        sysevent_set(gSyseventfd, gSysevent_token, param, gVlanSyncData[index].bridgeName, 0);
-#endif
 
     } else {
       CcspTraceError(("HOTSPOT_LIB : %s Invalid Index=%d\n", __FUNCTION__, index));
@@ -327,7 +304,7 @@ static int deleteVaps(){
      for(index = 0; index < MAX_VAP; index++){
             offset = 0;
             memset(cmdBuf, '\0', sizeof(cmdBuf));
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+#if !defined(RDK_ONEWIFI)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
@@ -502,26 +479,6 @@ static void addBrideAndVlan(int vlanIndex, int wan_vlan){
      offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "ifconfig %s.%d up; ", NMOCA_IFNAME, wan_vlan); 
-     #endif
-     #if defined(_COSA_INTEL_XB3_ARM_)
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "vconfig add %s %d; ",L2SD0_IFNAME, wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "brctl addif %s %s.%d; ",gVlanSyncData[vlanIndex].bridgeName, L2SD0_IFNAME, wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "ifconfig %s up; ", L2SD0_IFNAME);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "ifconfig %s.%d up; ",L2SD0_IFNAME, wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "swctl -c 16 -p 7 -v %d -m 2 -q 1; ", wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "swctl -c 16 -p 0 -v %d -m 2 -q 1; ", wan_vlan);
      #endif
 
      CcspTraceInfo(("HOTSPOT_LIB : Buffer 2 gre add = %s %d\n", cmdBuf, offset));
@@ -864,7 +821,7 @@ pErr setHotspot(void* const network){
 
 int deleteHotspot(){
      char   cmdBuf[1024];
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+#if !defined(RDK_ONEWIFI)
      int    offset = 0;
      int    index = 0;
 #endif
@@ -878,7 +835,7 @@ int deleteHotspot(){
          CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollback success...\n"));
          if(gXfinityEnable == true)
          {
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+#if !defined(RDK_ONEWIFI)
              for(index = 0; index < MAX_VAP; index++){
                  if (gVlanSyncData[index].bitVal & vapBitMask){
                       memset(cmdBuf, '\0', sizeof(cmdBuf));
@@ -931,11 +888,9 @@ int deleteHotspot(){
 
 int confirmVap(){
     char   Buf[200] = {0};
-#if !defined(_COSA_INTEL_XB3_ARM_)
     char   cmdBuf[1024] = {0};
     int    offset = 0;
     int    index = 0;
-#endif
     int    file_status = 0;
  
  
@@ -944,7 +899,6 @@ int confirmVap(){
 //bitmask
 //Hows l2sd0.xxx created for the XB3s ?
 
-#if !defined(_COSA_INTEL_XB3_ARM_)
     if(gXfinityEnable) {
         for(index = 0; index < MAX_VAP; index++){
             if (gVlanSyncData[index].bitVal & vapBitMask){
@@ -966,7 +920,6 @@ int confirmVap(){
             }
         }
      }
-#endif
      file_status = access(T_HOTSPOT_JSON, F_OK);
 
      if(file_status != 0){
@@ -1065,7 +1018,7 @@ static int wanfailover_handleTunnel(bool create)
         for(index = 0; index < MAX_VAP; index++){
             offset = 0;
             memset(cmdBuf, '\0', sizeof(cmdBuf));
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+#if !defined(RDK_ONEWIFI)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
