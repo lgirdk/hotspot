@@ -88,35 +88,29 @@ bool tunnel_param_synchronize() {
     {
        CcspTraceInfo(("HOTSPOT_LIB : call back not registered %s....\n", __FUNCTION__));
     }
+
 #if 0
     CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
-    parameterValStruct_t  param_val[4];
-    char  component[64]  = "eRT.com.cisco.spvtg.ccsp.pam";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/pam";
-    const char priEndpoint[256] = "Device.X_COMCAST-COM_GRE.Tunnel.1.PrimaryRemoteEndpoint"; 
-    const char secEndpoint[256] = "Device.X_COMCAST-COM_GRE.Tunnel.1.SecondaryRemoteEndpoint";
-    const char xfinityenable[256] = "Device.DeviceInfo.X_COMCAST_COM_xfinitywifiEnable";
-    char buff[20] = {0};
-    char* faultParam      = NULL;
-    int   ret             = 0;
+    parameterValStruct_t param_val[4];
+    char *component = "eRT.com.cisco.spvtg.ccsp.pam";
+    char *dstPath = "/com/cisco/spvtg/ccsp/pam";
+    char *faultParam = NULL;
+    int ret = 0;
 
     CcspTraceInfo(("HOTSPOT_LIB : Entering function %s....\n", __FUNCTION__));
     
-    param_val[0].parameterName = (char *)priEndpoint;
-    //strcpy(param_val[0].parameterValue, gPriEndptIP);
+    param_val[0].parameterName = (char *) "Device.X_COMCAST-COM_GRE.Tunnel.1.PrimaryRemoteEndpoint";
     param_val[0].parameterValue = gPriEndptIP;
     param_val[0].type = ccsp_string;
 
-    param_val[1].parameterName = (char *)secEndpoint;
-    //strcpy(param_val[1].parameterValue, gSecEndptIP);
+    param_val[1].parameterName = (char *) "Device.X_COMCAST-COM_GRE.Tunnel.1.SecondaryRemoteEndpoint";
     param_val[1].parameterValue = gSecEndptIP;
     param_val[1].type = ccsp_string;
-    (true == gXfinityEnable) ?
-       strcpy(buff, "true"):
-       strcpy(buff,"false");
-    param_val[2].parameterName = (char *)xfinityenable;
-    param_val[2].parameterValue = buff;
+
+    param_val[2].parameterName = (char *) "Device.DeviceInfo.X_COMCAST_COM_xfinitywifiEnable";
+    param_val[2].parameterValue = (gXfinityEnable == true) ? "true" : "false";
     param_val[2].type = ccsp_boolean;
+
     CcspTraceInfo(("HOTSPOT_LIB : sync params...\n"));
      
     ret = CcspBaseIf_setParameterValues(
@@ -130,12 +124,14 @@ bool tunnel_param_synchronize() {
             TRUE,
             &faultParam
             );
+
     if( ( ret != CCSP_SUCCESS ) && ( faultParam!=NULL )) {
             CcspTraceError((" tunnel set bus failed = %s\n"));
             bus_info->freefunc( faultParam );
             return FALSE;
     }
 #endif
+
     return TRUE;
 }
 
@@ -162,43 +158,22 @@ int gre_sysevent_syscfg_init()
 
 int update_bridge_config(int index) {
     int retVal = 0;
-    char rule[1024]={0}, query[500]={0}, param[500]={0};
-#if defined(_COSA_INTEL_XB3_ARM_)
-    char liveNetBuf[300]={0};
-    char outBuf[300]={0};
-    int len = 0;
-#endif
 
     CcspTraceInfo(("HOTSPOT_LIB : Entering function %s to set sysevent parameters Index=%d\n",
         __FUNCTION__, index));
 
     if (index >= 0) {
-        memset(rule,'\0',sizeof(rule));
-        memset(query,'\0',sizeof(query));
-        memset(param, '\0', sizeof (param));
+        char rule[256];
+        char param[40];
+        char query[500];
+
         snprintf(rule, sizeof(rule),"-A FORWARD -o %s -p udp --dport=67:68 -j NFQUEUE --queue-bypass --queue-num %d",
                 gVlanSyncData[index].bridgeName, gVlanSyncData[index].queue_num );
         snprintf(param, sizeof(param), "gre_1_%s_snoop_rule", gVlanSyncData[index].bridgeName);
+
+        memset(query,'\0',sizeof(query));
         sysevent_set_unique(gSyseventfd, gSysevent_token, "GeneralPurposeFirewallRule", rule, query, sizeof(query));
         sysevent_set(gSyseventfd, gSysevent_token, param, query, 0);
-
-#if defined(_COSA_INTEL_XB3_ARM_)
-        sysevent_get(gSyseventfd, gSysevent_token, "multinet-instances", liveNetBuf, sizeof(liveNetBuf));
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - sysevent live buff =%s\n", __FUNCTION__, liveNetBuf));
-        strcpy(outBuf, liveNetBuf);
-        len = strlen(outBuf);
-        snprintf(outBuf + len, sizeof(outBuf) - len, "%s%d", len ? " " : "", gVlanSyncData[index].instance);
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - sysevent parameter Index=%s\n", __FUNCTION__, outBuf));
-        sysevent_set(gSyseventfd, gSysevent_token, "multinet-instances", outBuf,0);
-        memset(param, '\0', sizeof (param));
-        snprintf(param, sizeof(param), "multinet_%d-localready", gVlanSyncData[index].instance);
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - multinet local ready =%s\n", __FUNCTION__, param));
-        sysevent_set(gSyseventfd, gSysevent_token, param, "1", 0);
-        memset(param, '\0', sizeof (param));
-        snprintf(param, sizeof(param), "multinet_%d-name", gVlanSyncData[index].instance);
-        CcspTraceInfo(("HOTSPOT_LIB :  %s - multinet name =%s\n", __FUNCTION__, param));
-        sysevent_set(gSyseventfd, gSysevent_token, param, gVlanSyncData[index].bridgeName, 0);
-#endif
 
     } else {
       CcspTraceError(("HOTSPOT_LIB : %s Invalid Index=%d\n", __FUNCTION__, index));
@@ -306,13 +281,10 @@ int ipAddress_version(char *ipAddress){
 
 int create_tunnel(char *gre_primary_endpoint){
 
-   char   cmdBuf[1024] = {0};
-   int    offset = 0;
+   char   cmdBuf[1024];
+   int    offset;
    int    retValue = 0;
    int    ip_version = -1;
-
-   
-         memset(cmdBuf, '\0', sizeof(cmdBuf));
 
          CcspTraceInfo(("HOTSPOT_LIB : Entering %s ...gSyseventfd = %d \n", __FUNCTION__, gSyseventfd));
          if (0 == gSyseventfd){
@@ -322,12 +294,14 @@ int create_tunnel(char *gre_primary_endpoint){
                    return retValue;
              }
          }
+
          CcspTraceInfo(("HOTSPOT_LIB : Rename the default gretap0 interface present in yocto\n"));
+         offset = 0;
          offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s dev %s name %s; ", IP_SET, GRE_IFNAME, GRE_IFNAME_DUMMY);
          sys_execute_cmd(cmdBuf);
-         memset(cmdBuf, '\0', sizeof(cmdBuf));
+
          offset = 0;
          ip_version = ipAddress_version(gre_primary_endpoint);
          CcspTraceInfo(("HOTSPOT_LIB : Creating IPv%d GRE tunnel\n", ip_version));
@@ -387,23 +361,23 @@ int create_tunnel(char *gre_primary_endpoint){
 	 offset += snprintf(cmdBuf+offset, sizeof(cmdBuf) - offset,"echo addif %s wan > /proc/driver/flowmgr/cmd;",GRE_IFNAME);
 
          CcspTraceInfo(("HOTSPOT_LIB : ROLLBACK Buffer 1 gre add = %s %d\n", cmdBuf, offset));
-         if (offset)
-             sys_execute_cmd(cmdBuf);
+         sys_execute_cmd(cmdBuf);
+
 	 return 0;
 }
 
-static int deleteVaps(){
-
-     char   cmdBuf[1024];
-     int    offset = 0;
-     int    index = 0;
+static int deleteVaps()
+{
+     int index = 0;
 
      CcspTraceInfo(("HOTSPOT_LIB : Entering %s\n", __FUNCTION__));
 
-     for(index = 0; index < MAX_VAP; index++){
-            offset = 0;
-            memset(cmdBuf, '\0', sizeof(cmdBuf));
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+     for (index = 0; index < MAX_VAP; index++)
+     {
+         char cmdBuf[1024];
+         int offset = 0;
+
+#if !defined(RDK_ONEWIFI)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
@@ -417,31 +391,27 @@ static int deleteVaps(){
                                 "%s %s ;", IP_DEL, GRE_IFNAME);
 
             CcspTraceInfo(("HOTSPOT_LIB : Buffer 3 gre add = %s %d\n", cmdBuf, offset));
-            if (offset)
-               sys_execute_cmd(cmdBuf);
+            sys_execute_cmd(cmdBuf);
       }
-      memset(cmdBuf, '\0', sizeof(cmdBuf));
+
       CcspTraceInfo(("HOTSPOT_LIB : Stopping Hotspot...\n"));
-      strncpy(cmdBuf, "killall CcspHotspot", SIZE_CMD);
-      sys_execute_cmd(cmdBuf);
+      sys_execute_cmd("killall CcspHotspot");
 
-
-      memset(cmdBuf, '\0', sizeof(cmdBuf));
       CcspTraceInfo(("HOTSPOT_LIB : Stopping Hotspot arpd...\n"));
-      strncpy(cmdBuf, "killall hotspot_arpd", SIZE_CMD);
-      sys_execute_cmd(cmdBuf);
+      sys_execute_cmd("killall hotspot_arpd");
+
       return 0;
 }
 
 static void hotspot_async_reg()
 {
-    char cmdBuff[300] = {0};
+    char cmdBuff[300];
+
     CcspTraceInfo(("HOTSPOT_LIB : configuring sysevent async....\n"));
     snprintf(cmdBuff, sizeof(cmdBuff), "%s %s", GRE_ASYNC_HOT_EP, GRE_PATH);
     CcspTraceInfo(("HOTSPOT_LIB : sysevent content %s\n", cmdBuff));
     sys_execute_cmd(cmdBuff);
 
-    memset(cmdBuff, '\0', sizeof(cmdBuff));
     FILE* file = fopen(GRE_FILE, "r");
     if(file)
     {
@@ -459,11 +429,10 @@ static void hotspot_async_reg()
     }
 }
 
-int hotspot_sysevent_enable_param(){
-
-    char cmdBuff[100] = {0};
-
+int hotspot_sysevent_enable_param()
+{
     CcspTraceInfo(("HOTSPOT_LIB : Entering function %s to set sysevent parameters gSyseventfd = %d\n",__FUNCTION__, gSyseventfd));
+
     sysevent_set(gSyseventfd, gSysevent_token, "snooper-circuit-enable", "1", 0);
     sysevent_set(gSyseventfd, gSysevent_token, "snooper-remote-enable", "1", 0);
     sysevent_set(gSyseventfd, gSysevent_token, "hotspotfd-primary", gPriEndptIP, 0);
@@ -511,28 +480,22 @@ int hotspot_sysevent_enable_param(){
     {
         hotspot_async_reg();
     }
-    memset(cmdBuff, '\0', sizeof(cmdBuff));
+
     CcspTraceInfo(("HOTSPOT_LIB : Stopping existing Hotspot...\n"));
-    strncpy(cmdBuff, "killall CcspHotspot", SIZE_CMD);
-    sys_execute_cmd(cmdBuff);
+    sys_execute_cmd("killall CcspHotspot");
 
-    memset(cmdBuff, '\0', sizeof(cmdBuff));
     CcspTraceInfo(("HOTSPOT_LIB : Starting Hotspot...\n"));
-    strncpy(cmdBuff, "/usr/bin/CcspHotspot -subsys eRT.", SIZE_CMD);
-    sys_execute_cmd(cmdBuff);
+    sys_execute_cmd("/usr/bin/CcspHotspot -subsys eRT.");
 
-
-    memset(cmdBuff, '\0', sizeof(cmdBuff));
     CcspTraceInfo(("HOTSPOT_LIB : Starting Hotspot arpd...\n"));
-    strncpy(cmdBuff, "/usr/bin/hotspot_arpd -q 0", SIZE_CMD);
-    sys_execute_cmd(cmdBuff);
+    sys_execute_cmd("/usr/bin/hotspot_arpd -q 0");
 
     return 0;
 }
 
 
 static void addBrideAndVlan(int vlanIndex, int wan_vlan){
-     char   cmdBuf[1024] = {0};
+     char   cmdBuf[1024];
      int    offset = 0;
 
      if( -1 == vlanIndex) {
@@ -543,7 +506,7 @@ static void addBrideAndVlan(int vlanIndex, int wan_vlan){
 
      CcspTraceInfo(("HOTSPOT_LIB : Adding Bride and vlan configuration: vlan id: %d vlanIndex: %d\n",
              wan_vlan, vlanIndex));
-     memset(cmdBuf, '\0', sizeof(cmdBuf));
+
      offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
                                 "brctl addbr %s; ", gVlanSyncData[vlanIndex].bridgeName);    
@@ -591,30 +554,10 @@ static void addBrideAndVlan(int vlanIndex, int wan_vlan){
                                 sizeof(cmdBuf) - offset,
                                 "ifconfig %s.%d up; ", NMOCA_IFNAME, wan_vlan); 
      #endif
-     #if defined(_COSA_INTEL_XB3_ARM_)
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "vconfig add %s %d; ",L2SD0_IFNAME, wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "brctl addif %s %s.%d; ",gVlanSyncData[vlanIndex].bridgeName, L2SD0_IFNAME, wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "ifconfig %s up; ", L2SD0_IFNAME);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "ifconfig %s.%d up; ",L2SD0_IFNAME, wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "swctl -c 16 -p 7 -v %d -m 2 -q 1; ", wan_vlan);
-     offset += snprintf(cmdBuf+offset,
-                                sizeof(cmdBuf) - offset,
-                                "swctl -c 16 -p 0 -v %d -m 2 -q 1; ", wan_vlan);
-     #endif
 
      CcspTraceInfo(("HOTSPOT_LIB : Buffer 2 gre add = %s %d\n", cmdBuf, offset));
-     if (offset)
-        sys_execute_cmd(cmdBuf);
+
+     sys_execute_cmd(cmdBuf);
 
      if(vlanIndex == VLAN_INDEX_1){
          t2_event_d("XWIFI_VLANID_6_split", wan_vlan);
@@ -687,8 +630,8 @@ bool get_ssid_enable(int ssidIdx)
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
-    char dstComponent[64]="eRT.com.cisco.spvtg.ccsp.wifi";
-    char dstPath[64]="/com/cisco/spvtg/ccsp/wifi";
+    char *dstComponent = "eRT.com.cisco.spvtg.ccsp.wifi";
+    char *dstPath = "/com/cisco/spvtg/ccsp/wifi";
     const char ap[128]={0};
     char *paramNames[]={(char *)ap};
     int  valNum = 0;
@@ -861,7 +804,6 @@ pErr setHotspot(void* const network){
      int    retValue = 0;
      int    index = 0;
      int    vlanid = 0;
-     char   cmdBuf[1024] = {0};
      int   status = 0;
      int   file_status = 0;
      char val[16] = {0};
@@ -880,8 +822,6 @@ pErr setHotspot(void* const network){
      }
 
      memset((char *)execRetVal,0,sizeof(Err));
-
-     memset(cmdBuf, '\0', sizeof(cmdBuf));
 
      if(NULL == network){
           execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
@@ -923,10 +863,8 @@ pErr setHotspot(void* const network){
          CcspTraceInfo(("HOTSPOT_LIB : Nothing is changed from tunnel side, No need to recreate...\n"));
          jansson_store_tunnel_info(pGreTunnelData);
          gXfinityEnable = oldTunnelData.gre_enable;
-         memset(cmdBuf, '\0', sizeof(cmdBuf));
          CcspTraceInfo(("HOTSPOT_LIB : Creating /tmp/.hotspot_blob_inprogress\n"));
-         strncpy(cmdBuf, "touch /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-         sys_execute_cmd(cmdBuf);
+         sys_execute_cmd("touch /tmp/.hotspot_blob_inprogress");
          execRetVal->ErrorCode = BLOB_EXEC_SUCCESS;
          return execRetVal;
      }
@@ -964,19 +902,17 @@ pErr setHotspot(void* const network){
              strncpy(gSecEndptIP, pGreTunnelData->entries->gre_sec_endpoint,SIZE_OF_IP - 1);
          }
          gXfinityEnable = true;
-         memset(cmdBuf, '\0', sizeof(cmdBuf));
+
          CcspTraceInfo(("HOTSPOT_LIB : Creating /tmp/.hotspot_blob_inprogress\n"));
-         strncpy(cmdBuf, "touch /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-         sys_execute_cmd(cmdBuf);
+         sys_execute_cmd("touch /tmp/.hotspot_blob_inprogress");
+
     /* Deleting existing Tunnels*/
          //deleteVaps();
          if ((paramsChanged & PRIMARY_EP_CHANGED) || (paramsChanged & SECONDARY_EP_CHANGED) || (paramsChanged & GRE_ENABLE_CHANGE)){
              epChanged = true;
              if((oldTunnelData.isFirst == false) && (oldTunnelData.gre_enable == true)){
-                 memset(cmdBuf, '\0', sizeof(cmdBuf));
                  CcspTraceInfo(("HOTSPOT_LIB : deleting the gre tunnel...\n"));
-                 strncpy(cmdBuf, "ip link del gretap0", SIZE_CMD);
-                 sys_execute_cmd(cmdBuf);
+                 sys_execute_cmd("ip link del gretap0");
              }
              create_tunnel( pGreTunnelData->entries->gre_primary_endpoint);
          }
@@ -1026,12 +962,8 @@ pErr setHotspot(void* const network){
 }
 
 int deleteHotspot(){
-     char   cmdBuf[1024];
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
-     int    offset = 0;
-     int    index = 0;
-#endif
      bool   ret = FALSE;
+
      deleteVaps();
      vapBitMask = 0x00;
      CcspTraceInfo(("HOTSPOT_LIB : Entering 'deleteHotspot'\n"));
@@ -1041,17 +973,14 @@ int deleteHotspot(){
          CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollback success...\n"));
          if(gXfinityEnable == true)
          {
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+#if !defined(RDK_ONEWIFI)
+             int index;
              for(index = 0; index < MAX_VAP; index++){
                  if (gVlanSyncData[index].bitVal & vapBitMask){
-                      memset(cmdBuf, '\0', sizeof(cmdBuf));
-                      offset = 0;
-                      offset += snprintf(cmdBuf+offset, 
-                                sizeof(cmdBuf) - offset,
-                                "brctl addif %s %s; ", gVlanSyncData[index].bridgeName, gVlanSyncData[index].vapInterface);
+                      char cmdBuf[1024];
+                      int offset = snprintf(cmdBuf, sizeof(cmdBuf), "brctl addif %s %s", gVlanSyncData[index].bridgeName, gVlanSyncData[index].vapInterface);
                       CcspTraceInfo(("HOTSPOT_LIB : Buffer 4 gre confirm vap = %s %d\n", cmdBuf, offset));
-                      if (offset)
-                         sys_execute_cmd(cmdBuf);
+                      sys_execute_cmd(cmdBuf);
                   }
               }
 #endif
@@ -1062,12 +991,10 @@ int deleteHotspot(){
              tunnel_param_synchronize();
 
 #if defined(_CBR_PRODUCT_REQ_)
-             memset(cmdBuf, '\0', sizeof(cmdBuf));
              sleep(5);
-             strncpy(cmdBuf, "killall -q -9 eapd 2>/dev/null", sizeof(cmdBuf)-1);
-             sys_execute_cmd(cmdBuf);
+             sys_execute_cmd("killall -q -9 eapd 2>/dev/null");
              sleep(5);
-             CcspTraceInfo(("[%s] [%d]Restarting EAPD.. Buf : [%s]\n", __func__, __LINE__, cmdBuf));
+             CcspTraceInfo(("[%s] [%d]Restarting EAPD.. Buf : [%s]\n", __func__, __LINE__, "killall -q -9 eapd 2>/dev/null"));
              sys_execute_cmd("eapd");
 #endif
          }
@@ -1075,10 +1002,9 @@ int deleteHotspot(){
          {
              CcspTraceInfo(("HOTSPOT_LIB : Hotspot is Disabled in the rollback setting\n"));
          }
-         memset(cmdBuf, '\0', sizeof(cmdBuf));
+
          CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
-         strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-         sys_execute_cmd(cmdBuf);
+         sys_execute_cmd("rm /tmp/.hotspot_blob_inprogress");
          free(tempTunnelData);
          tempTunnelData = NULL;
 
@@ -1087,10 +1013,9 @@ int deleteHotspot(){
        else{
              vapBitMask = 0x00;
              CcspTraceInfo(("HOTSPOT_LIB : 'deleteHotspot' rollbaack ptr null...\n"));
-             memset(cmdBuf, '\0', sizeof(cmdBuf));
+
              CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
-             strncpy(cmdBuf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-             sys_execute_cmd(cmdBuf);
+             sys_execute_cmd("rm /tmp/.hotspot_blob_inprogress");
              free(tempTunnelData);
              tempTunnelData = NULL;
              return BLOB_EXEC_FAILURE;
@@ -1151,21 +1076,14 @@ int checkGreInterface_Exist(int vlan_ID, char *bridge_name)
 }
 
 int confirmVap(){
-    char   Buf[200] = {0};
-#if !defined(_COSA_INTEL_XB3_ARM_)
-    char   cmdBuf[1024] = {0};
-    int    offset = 0;
     int    index = 0;
-#endif
     int    file_status = 0;
- 
- 
+
     CcspTraceInfo(("HOTSPOT_LIB : Entering %s \n",__FUNCTION__));
 //Test if one vap disabled and another enabled through blob works well with the
 //bitmask
 //Hows l2sd0.xxx created for the XB3s ?
 
-#if !defined(_COSA_INTEL_XB3_ARM_)
     if(gXfinityEnable) {
         for(int i=0; i<MAX_VAP; i++){
             if(checkGreInterface_Exist(vlanIdList[i], gVlanSyncData[i].bridgeName)){
@@ -1175,9 +1093,9 @@ int confirmVap(){
         }
         for(index = 0; index < MAX_VAP; index++){
             if (gVlanSyncData[index].bitVal & vapBitMask){
+                char cmdBuf[1024];
+                int offset = 0;
 
-                memset(cmdBuf, '\0', sizeof(cmdBuf));
-                offset = 0;
 #if !defined(RDK_ONEWIFI)
                 offset += snprintf(cmdBuf+offset, 
                                 sizeof(cmdBuf) - offset,
@@ -1188,85 +1106,69 @@ int confirmVap(){
                                 "echo 1 > /sys/class/net/%s/bridge/nf_call_iptables;", gVlanSyncData[index].bridgeName);
 
                 CcspTraceInfo(("HOTSPOT_LIB : Buffer 4 gre confirm vap = %s %d\n", cmdBuf, offset));
-                if (offset)
-                   sys_execute_cmd(cmdBuf);
+                sys_execute_cmd(cmdBuf);
             }
         }
      }
-#endif
      file_status = access(T_HOTSPOT_JSON, F_OK);
 
      if(file_status != 0){
            CcspTraceError(("HOTSPOT_LIB : hotspot.json file not available in tmp  %s \n", __FUNCTION__));
-           memset(Buf, '\0', sizeof(Buf));
            CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
-           strncpy(Buf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-           sys_execute_cmd(Buf);
+           sys_execute_cmd("rm /tmp/.hotspot_blob_inprogress");
            memset((char *)execRetVal,0,sizeof(Err));
            execRetVal->ErrorCode = BLOB_EXEC_FAILURE;
            return (intptr_t)execRetVal;
      }
-     memset(Buf, '\0', sizeof(Buf));
+
 //Lock /nvram/hotspot.json before copying 
-     snprintf(Buf, sizeof(Buf), "cp /tmp/hotspot.json  /nvram/hotspot.json");
-     sys_execute_cmd(Buf);
-  
-     memset(Buf, '\0', sizeof(Buf));
-     snprintf(Buf, sizeof(Buf), "rm /tmp/hotspot.json");
-     sys_execute_cmd(Buf);
+     sys_execute_cmd("cp /tmp/hotspot.json /nvram/hotspot.json");
+     sys_execute_cmd("rm /tmp/hotspot.json");
 
      gXfinityEnable ? PsmSet(PSM_HOTSPOT_ENABLE, "1") : PsmSet(PSM_HOTSPOT_ENABLE, "0");
      vapBitMask = 0x00;
      if(gXfinityEnable) {
+         char Buf[12];
          hotspot_sysevent_enable_param();
          firewall_restart();
          tunnel_param_synchronize();
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[0]);
          PsmSet(PSM_VLAN_OPEN_2G, Buf);
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[1]);
          PsmSet(PSM_VLAN_OPEN_5G, Buf);
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[2]);
          PsmSet(PSM_VLAN_SECURE_2G, Buf);
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[3]);
          PsmSet(PSM_VLAN_SECURE_5G, Buf);
 #if defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);
          PsmSet(PSM_VLAN_OPEN_6G, Buf);
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[5]);
          PsmSet(PSM_VLAN_SECURE_6G, Buf);
 #endif
 #if defined (_CBR_PRODUCT_REQ_)
-         memset(Buf, 0, sizeof(Buf));
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);
          PsmSet(PSM_VLAN_PUBLIC, Buf);
 #endif
 #if defined(_CBR_PRODUCT_REQ_)
-         memset(Buf, '\0', sizeof(Buf));
          sleep(5);
-         strncpy(Buf, "killall -q -9 eapd 2>/dev/null", sizeof(Buf)-1);
-         sys_execute_cmd(Buf);
+         sys_execute_cmd("killall -q -9 eapd 2>/dev/null");
          sleep(5);
-         CcspTraceInfo(("[%s] [%d]Restarting EAPD.. Buf : [%s]\n", __func__, __LINE__, Buf));
+         CcspTraceInfo(("[%s] [%d]Restarting EAPD.. Buf : [%s]\n", __func__, __LINE__, "killall -q -9 eapd 2>/dev/null"));
          sys_execute_cmd("eapd");
 #endif
      }
-     memset(Buf, '\0', sizeof(Buf));
+
      CcspTraceInfo(("HOTSPOT_LIB : Removing /tmp/.hotspot_blob_inprogress\n"));
-     strncpy(Buf, "rm /tmp/.hotspot_blob_inprogress", SIZE_CMD);
-     sys_execute_cmd(Buf);
+     sys_execute_cmd("rm /tmp/.hotspot_blob_inprogress");
+
 /* Adding flag for pandm to avoid sending multiple blobs */
-     memset(Buf, '\0', sizeof(Buf));
-     snprintf(Buf, sizeof(Buf), "touch /tmp/.hotspot_blob_executed");
-     sys_execute_cmd(Buf);
+     sys_execute_cmd("touch /tmp/.hotspot_blob_executed");
+
      populate_old_params_to_structure();
      free(tempTunnelData);
      tempTunnelData = NULL;
+
      return 0;
 }
 
@@ -1284,17 +1186,15 @@ void register_callbackHotspot(callbackHotspot ptr_reg_callback){
 
 static int wanfailover_handleTunnel(bool create)
 {
-
-    char   cmdBuf[1024];
-    int    offset = 0;
     int    index = 0;
 
     if(!create) {
         CcspTraceInfo(("HOTSPOT_LIB : %s Bringing down the Hotspot N/W\n", __FUNCTION__));
         for(index = 0; index < MAX_VAP; index++){
-            offset = 0;
-            memset(cmdBuf, '\0', sizeof(cmdBuf));
-#if !defined(_COSA_INTEL_XB3_ARM_) && !defined(RDK_ONEWIFI)
+            char cmdBuf[1024];
+            int offset = 0;
+
+#if !defined(RDK_ONEWIFI)
             offset += snprintf(cmdBuf+offset,
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ; ",
@@ -1307,8 +1207,8 @@ static int wanfailover_handleTunnel(bool create)
                                 sizeof(cmdBuf) - offset,
                                 "%s %s ;", IP_DEL, GRE_IFNAME);
             //CcspTraceInfo(("HOTSPOT_LIB : Buffer 3 gre add = %s %d\n", cmdBuf, offset));
-            if (offset)
-                sys_execute_cmd(cmdBuf);
+
+            sys_execute_cmd(cmdBuf);
             CcspTraceInfo(("HOTSPOT_LIB : %s Hotspot bridge %s and ports are down\n", __FUNCTION__, 
                                 gVlanSyncData[index].bridgeName));
         }
@@ -1321,11 +1221,8 @@ static int wanfailover_handleTunnel(bool create)
     return 0;
 }
 
-
-int hotspot_wan_failover(bool remote_wan_enabled){
-
-    char Buf[200] = {0};
-    char rec[200] = {0};
+int hotspot_wan_failover(bool remote_wan_enabled)
+{
     char val[16] = {0};
 
     //CcspTraceInfo(("HOTSPOT_LIB : Entering %s ....%d\n", __FUNCTION__, remote_wan_enabled));
@@ -1341,18 +1238,13 @@ int hotspot_wan_failover(bool remote_wan_enabled){
              //it will create hotspot.json in nvram
              jansson_store_tunnel_info(NULL);
 
-             memset(Buf, '\0', sizeof(Buf));
-             snprintf(Buf, sizeof(Buf), "cp /nvram/hotspot.json /tmp/hotspot_wanfailover.json");
-             sys_execute_cmd(Buf);
+             sys_execute_cmd("cp /nvram/hotspot.json /tmp/hotspot_wanfailover.json");
 
-             snprintf(rec, sizeof(rec), "%s",  WEB_CONF_ENABLE);
              //If webconfig is disabled and if hostpot blob was never sent, remove the unecessary
              //copy from nvram
-             if((PsmGet(rec, val, sizeof(val)) == 0 && atoi(val) == FALSE) && (0 != access(HOTSPOT_BLOB, F_OK))){
+             if((PsmGet(WEB_CONF_ENABLE, val, sizeof(val)) == 0 && atoi(val) == FALSE) && (0 != access(HOTSPOT_BLOB, F_OK))){
                 CcspTraceInfo(("HOTSPOT_LIB : %s Remove the nvram copy of json\n", __FUNCTION__));
-                memset(Buf, '\0', sizeof(Buf));
-                snprintf(Buf, sizeof(Buf), "rm -rf /nvram/hotspot.json");
-                sys_execute_cmd(Buf);
+                sys_execute_cmd("rm -rf /nvram/hotspot.json");
              }
         }
 
@@ -1363,28 +1255,24 @@ int hotspot_wan_failover(bool remote_wan_enabled){
         CcspTraceInfo(("HOTSPOT_LIB : Remote WAN disabled, Bringing up tunnels \n"));
 
         wanfailover_handleTunnel(true);
-        snprintf(rec, sizeof(rec), "%s",  WEB_CONF_ENABLE);
+
         //If webconfig enabled and nvram copy of json was missing , take this chance to restore
-        if((0 != access(N_HOTSPOT_JSON, F_OK)) && (PsmGet(rec, val, sizeof(val)) == 0 && atoi(val) == TRUE) && (0 == access(HOTSPOT_BLOB, F_OK))){
+        if((0 != access(N_HOTSPOT_JSON, F_OK)) && (PsmGet(WEB_CONF_ENABLE, val, sizeof(val)) == 0 && atoi(val) == TRUE) && (0 == access(HOTSPOT_BLOB, F_OK))){
            CcspTraceInfo(("HOTSPOT_LIB :  This may be case of lost nvram, take oppurtunity and restore in nvram\n"));
-           memset(Buf, '\0', sizeof(Buf));
-           snprintf(Buf, sizeof(Buf), "cp /tmp/hotspot_wanfailover.json /nvram/hotspot.json");
-           sys_execute_cmd(Buf);
+           sys_execute_cmd("cp /tmp/hotspot_wanfailover.json /nvram/hotspot.json");
         }
-        memset(Buf, '\0', sizeof(Buf));
-        snprintf(Buf, sizeof(Buf), "rm -rf /tmp/hotspot_wanfailover.json");
-        sys_execute_cmd(Buf);
+        sys_execute_cmd("rm -rf /tmp/hotspot_wanfailover.json");
     }
+
     return 0;
 }
 
 void recreate_tunnel(){
-    char   cmdBuf[1024];
-    int    offset = 0;
-    offset += snprintf(cmdBuf+offset, sizeof(cmdBuf) - offset, "%s %s ;", IP_DEL, GRE_IFNAME);
+    char cmdBuf[1024];
+    int offset;
+
+    offset = snprintf(cmdBuf, sizeof(cmdBuf), "%s %s", IP_DEL, GRE_IFNAME);
     CcspTraceInfo(("HOTSPOT_LIB : Buffer for deleting gre tunnel = %s %d\n", cmdBuf, offset));
-    if (offset){
-        sys_execute_cmd(cmdBuf);
-    }
+    sys_execute_cmd(cmdBuf);
     jansson_rollback_tunnel_info();
 }
