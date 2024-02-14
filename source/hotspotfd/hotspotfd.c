@@ -892,7 +892,6 @@ printf("------------------ %s \n", __func__);
 #define kbrlan8_inst "8"
 #define kbrlan9_inst "9"
 #define kbrlan11_inst "11"
-#define kbrlan16_inst "16"
 #define kmultinet_Sync "multinet-syncMembers"
 
 static void hotspotfd_syncMultinet(void)
@@ -911,15 +910,9 @@ static void hotspotfd_syncMultinet(void)
 	if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan9_inst, 0)) {
 		CcspTraceError(("sysevent set %s failed on brlan9\n", kmultinet_Sync));
         }
-#if defined (_CBR2_PRODUCT_REQ_)
-        if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan16_inst, 0)) {
-                CcspTraceError(("sysevent set %s failed on brpublic\n", kmultinet_Sync));
-        }
-#else
         if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan11_inst, 0)) {
 		CcspTraceError(("sysevent set %s failed on brpublic\n", kmultinet_Sync));
         }
-#endif
 #endif
 }
 #endif

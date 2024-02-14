@@ -81,10 +81,7 @@
 #define WEB_CONF_ENABLE         "eRT.com.cisco.spvtg.ccsp.webpa.WebConfigRfcEnable"
      
 #define END_POINT_IP 40
-#if defined (_CBR2_PRODUCT_REQ_)
-   #define MAX_VAP      5
-   #define PSM_VLAN_PUBLIC        "dmsb.l2net.16.Vid"
-#elif defined (_CBR_PRODUCT_REQ_)
+#if defined (_CBR_PRODUCT_REQ_)
    #define MAX_VAP      5
    #define PSM_VLAN_PUBLIC        "dmsb.l2net.11.Vid"
 #elif defined (_XB8_PRODUCT_REQ_) && defined(RDK_ONEWIFI)
