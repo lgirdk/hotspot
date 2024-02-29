@@ -17,6 +17,7 @@
  * limitations under the License.
 */
 
+#include <netinet/in.h>
 #include "libHotspot.h"
 #include "libHotspotApi.h"
 #include "webconfig_framework.h"
@@ -38,7 +39,6 @@ char     gPriEndptIP[SIZE_OF_IP] = {0};
 char     gSecEndptIP[SIZE_OF_IP] = {0};
 bool     gXfinityEnable = false;
 int      vlanIdList[MAX_VAP];
-#define  BUFF_LEN 1024
 
 static pErr execRetVal = NULL;
 extern vlanSyncData_s gVlanSyncData[];
@@ -218,39 +218,43 @@ static int hotspot_sysevent_disable_param(){
     return 0;
 }
 
-char* get_local_ipv6_address(){
+static char *get_local_ipv6_address (char *buf, size_t len)
+{
+    FILE *fp;
 
-    FILE *fp    = NULL;
-    char *buff1 = NULL;
-    int  Ep_len = -1;
     CcspTraceInfo(("HOTSPOT_LIB : Entering get_local_ipv6_address\n"));
-    fp = popen("ip addr show erouter0 | grep -w global | awk '/inet6/ {print $2}' | cut -d/ -f1", "r");
-    if (fp == NULL)
-    {
+
+    if (len == 0)
+        return NULL;
+
+    /*
+       Output may contain multiple addresses. We rely on the single fgets()
+       call below to extract the first one.
+    */
+    if ((fp = popen("ip addr show erouter0 | grep -w global | awk '/inet6/ {print $2}' | cut -d/ -f1", "r")) == NULL) {
         CcspTraceError(("HOTSPOT_LIB : Popen Error\n"));
         return NULL;
     }
-    else
-    {
-        buff1 = (char *)calloc(BUFF_LEN, sizeof(char));
-        if (fgets(buff1, BUFF_LEN, fp) != NULL)
-        {
-            Ep_len = strlen(buff1);
-            if (buff1[Ep_len-1] == '\n')
-            {
-                buff1[Ep_len-1] = '\0';
-            }
-            CcspTraceInfo(("HOTSPOT_LIB : Local ipv6 address = %s \n", buff1));
-        }
-        else
-        {
-            CcspTraceWarning(("HOTSPOT_LIB : local wan interface has no Global IPv6 address\n"));
-            free(buff1);
-            buff1 = NULL;
-        }
-        pclose(fp);
-        return buff1;
+
+    if (fgets(buf, len, fp) != NULL) {
+        len = strlen(buf);
+        if ((len > 0) && (buf[len - 1] == '\n'))
+            buf[len - 1] = '\0';
     }
+    else {
+        buf[0] = 0;
+    }
+
+    pclose(fp);
+
+    if (buf[0]) {
+        CcspTraceInfo(("HOTSPOT_LIB : Local ipv6 address = %s \n", buf));
+    }
+    else {
+        CcspTraceWarning(("HOTSPOT_LIB : local wan interface has no Global IPv6 address\n"));
+    }
+
+    return buf;
 }
 
 int ipAddress_version(char *ipAddress){
@@ -269,7 +273,6 @@ int create_tunnel(char *gre_primary_endpoint){
    int    offset = 0;
    int    retValue = 0;
    int    ip_version = -1;
-   char*  local_Ipv6Address = NULL;
 
    
          memset(cmdBuf, '\0', sizeof(cmdBuf));
@@ -297,14 +300,13 @@ int create_tunnel(char *gre_primary_endpoint){
                               "%s %s type gretap remote %s dev erouter0  dsfield b0 nopmtudisc;",
                               IP_ADD, GRE_IFNAME, gre_primary_endpoint);
          }else if (ip_version == 6){
-             local_Ipv6Address = get_local_ipv6_address();
-             if (local_Ipv6Address != NULL)
+             char local_Ipv6Address[INET6_ADDRSTRLEN];
+             if (get_local_ipv6_address(local_Ipv6Address, sizeof(local_Ipv6Address)) != NULL)
              {
                  offset += snprintf(cmdBuf+offset,
                               sizeof(cmdBuf) - offset,
                               "%s name %s type ip6gretap local %s remote %s encaplimit none;",
                               IP_ADD, GRE_IFNAME, local_Ipv6Address, gre_primary_endpoint);
-                 free(local_Ipv6Address);
              }
              else
              {
