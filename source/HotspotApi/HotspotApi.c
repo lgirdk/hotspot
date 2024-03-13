@@ -898,7 +898,7 @@ int deleteHotspot(){
              firewall_restart();
              tunnel_param_synchronize();
 
-#if (defined(_CBR_PRODUCT_REQ_) && !defined(_CBR2_PRODUCT_REQ_))
+#if defined(_CBR_PRODUCT_REQ_)
              memset(cmdBuf, '\0', sizeof(cmdBuf));
              sleep(5);
              strncpy(cmdBuf, "killall -q -9 eapd 2>/dev/null", sizeof(cmdBuf)-1);
@@ -1019,7 +1019,7 @@ int confirmVap(){
          snprintf(Buf, sizeof(Buf), "%d", vlanIdList[4]);
          PsmSet(PSM_VLAN_PUBLIC, Buf);
 #endif
-#if (defined(_CBR_PRODUCT_REQ_) && !defined(_CBR2_PRODUCT_REQ_))
+#if defined(_CBR_PRODUCT_REQ_)
          memset(Buf, '\0', sizeof(Buf));
          sleep(5);
          strncpy(Buf, "killall -q -9 eapd 2>/dev/null", sizeof(Buf)-1);
