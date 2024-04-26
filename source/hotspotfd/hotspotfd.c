@@ -2225,6 +2225,17 @@ Try_secondary:
                     // for no reason?
                     // TODO: Need to try the Primary once before switching.
                     switchedFromSecondary = true;
+                    if(ssid_reset_mask == 0)
+                    {
+                         if(TRUE == get_validate_ssid())
+                         {
+                             CcspTraceInfo(("SSID values are updated successfully before Switching to Primary EP\n"));
+                         }
+                         else
+                         {
+                             CcspTraceInfo(("SSID values not are updated successfully Switching to Primary EP\n"));
+                         }
+                    }
                     break;
                 }
                 if(ssid_reset_mask != 0) {
