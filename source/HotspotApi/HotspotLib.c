@@ -82,10 +82,10 @@ vlanSyncData_s gVlanSyncData[] = {
 };
 #else
 vlanSyncData_s gVlanSyncData[] = {
-     {VAP_NAME_4, "NULL", "NULL", 0x1, 0, 0},
-     {VAP_NAME_5, "NULL", "NULL", 0x2, 0, 0},
-     {VAP_NAME_8, "NULL", "NULL", 0x4, 0, 0},
-     {VAP_NAME_9, "NULL", "NULL", 0x8, 0, 0}
+     {VAP_NAME_4, "NULL", "NULL", 0x1, 0, 1},
+     {VAP_NAME_5, "NULL", "NULL", 0x2, 0, 2},
+     {VAP_NAME_8, "NULL", "NULL", 0x4, 0, 3},
+     {VAP_NAME_9, "NULL", "NULL", 0x8, 0, 4}
 };
 #endif
 
