@@ -81,6 +81,12 @@
 #include "secure_wrapper.h"
 #include <telemetry_busmessage_sender.h>
 
+#ifdef UNIT_TEST_DOCKER_SUPPORT
+#define STATIC
+#else
+#define STATIC static
+#endif
+
 #define PACKETSIZE  64
 #define IPv4_HEADER_OFFSET 20
 #define ICMP_ECHO_STRING "ICMP test string"
@@ -106,7 +112,7 @@
 #endif
 
 extern  ANSC_HANDLE             bus_handle;
-static char ssid_reset_mask = 0x0;
+STATIC char ssid_reset_mask = 0x0;
 
 #if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
 #define SSIDVAL 5
@@ -130,66 +136,66 @@ unsigned int gKeepAliveInterval     = kDefault_KeepAliveInterval;
 unsigned int gKeepAliveIntervalFailure     = kDefault_KeepAliveIntervalFailure;
 unsigned int gKeepAliveThreshold    = kDefault_KeepAliveThreshold;
 
-static bool gPrimaryIsActive = true;     // start with primary EP, assume active
-static bool gSecondaryIsActive = false;
+STATIC bool gPrimaryIsActive = true;     // start with primary EP, assume active
+STATIC bool gSecondaryIsActive = false;
 
-static unsigned int gKeepAlivesSent = 0;     // aggregate of primary & secondary
-static unsigned int gKeepAlivesReceived = 0; // aggregate of primary & secondary
-static unsigned int gSecondaryMaxTime = kDefault_SecondaryMaxTime;
-static unsigned int gSwitchedBackToPrimary = 0;
+STATIC unsigned int gKeepAlivesSent = 0;     // aggregate of primary & secondary
+STATIC unsigned int gKeepAlivesReceived = 0; // aggregate of primary & secondary
+STATIC unsigned int gSecondaryMaxTime = kDefault_SecondaryMaxTime;
+STATIC unsigned int gSwitchedBackToPrimary = 0;
 
-static bool gPrimaryIsAlive = false; 
-static bool gSecondaryIsAlive = false; 
+STATIC bool gPrimaryIsAlive = false;
+STATIC bool gSecondaryIsAlive = false;
 
-static char gpPrimaryEP[kMax_IPAddressLength];
-static char gpSecondaryEP[kMax_IPAddressLength];
-static unsigned int gKeepAlivePolicy = kDefault_KeepAlivePolicy;
-static bool gKeepAliveEnable = false;
-static bool gKeepAliveLogEnable = true;
-static unsigned int gKeepAliveCount = kDefault_KeepAliveCount;
-static int prevPingStatus = STATUS_FAILURE;
+STATIC char gpPrimaryEP[kMax_IPAddressLength];
+STATIC char gpSecondaryEP[kMax_IPAddressLength];
+STATIC unsigned int gKeepAlivePolicy = kDefault_KeepAlivePolicy;
+STATIC bool gKeepAliveEnable = false;
+STATIC bool gKeepAliveLogEnable = true;
+STATIC unsigned int gKeepAliveCount = kDefault_KeepAliveCount;
+STATIC int prevPingStatus = STATUS_FAILURE;
 
 #ifdef __HAVE_SYSEVENT__
-static int sysevent_fd;
-static token_t sysevent_token;
-static int sysevent_fd_gs;
-static token_t sysevent_token_gs;
-static pthread_t sysevent_tid;
+STATIC int sysevent_fd;
+STATIC token_t sysevent_token;
+STATIC int sysevent_fd_gs;
+STATIC token_t sysevent_token_gs;
+STATIC pthread_t sysevent_tid;
 #endif
 
-static int gShm_fd;
-static hotspotfd_statistics_s * gpStats;
-static int gShm_snoop_fd;
+STATIC int gShm_fd;
+STATIC hotspotfd_statistics_s * gpStats;
+STATIC int gShm_snoop_fd;
 snooper_statistics_s * gpSnoop_Stats;
-static int  gKeepAliveChecksumCnt = 0;  
-static int  gKeepAliveSequenceCnt = 0;   
-static int  gDeadInterval = 5 * kDefault_KeepAliveInterval;   
-static char gKeepAliveInterface[kMax_InterfaceLength];
+STATIC int  gKeepAliveChecksumCnt = 0;
+STATIC int  gKeepAliveSequenceCnt = 0;
+STATIC int  gDeadInterval = 5 * kDefault_KeepAliveInterval;
+STATIC char gKeepAliveInterface[kMax_InterfaceLength];
 
-static bool gbFirstPrimarySignal = true;
-static bool gbFirstSecondarySignal = true;
+STATIC bool gbFirstPrimarySignal = true;
+STATIC bool gbFirstSecondarySignal = true;
 
-static pthread_mutex_t keep_alive_mutex = PTHREAD_MUTEX_INITIALIZER;
+STATIC pthread_mutex_t keep_alive_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static bool gPriStateIsDown = false;
-static bool gSecStateIsDown = false;
-static bool gBothDnFirstSignal = true;
+STATIC bool gPriStateIsDown = false;
+STATIC bool gSecStateIsDown = false;
+STATIC bool gBothDnFirstSignal = true;
 
-static bool gTunnelIsUp = false;
-static bool gVapIsUp = true;
-static bool wanFailover = false; //Always false as long as wan failover does'nt happen
+STATIC bool gTunnelIsUp = false;
+STATIC bool gVapIsUp = true;
+STATIC bool wanFailover = false; //Always false as long as wan failover does'nt happen
 
-static char old_wan_ipv4[kMax_IPAddressLength];
-static char old_wan_ipv6[kMax_IPAddressLength];
+STATIC char old_wan_ipv4[kMax_IPAddressLength];
+STATIC char old_wan_ipv6[kMax_IPAddressLength];
 
 #ifdef WAN_FAILOVER_SUPPORTED
 extern int hotspot_wan_failover(bool isRemoteWANEnabled);
 extern int PsmGet(const char *param, char *value, int size);
-static pthread_t rbus_tid;
+STATIC pthread_t rbus_tid;
 rbusHandle_t handle;
 #endif
 
-static pthread_t dhcp_snooper_tid;
+STATIC pthread_t dhcp_snooper_tid;
 
 int gSnoopNumberOfClients = 0; //shared variable across hotspotfd and dhcp_snooperd
 
@@ -226,33 +232,6 @@ char gSnoopSyseventSSIDs[kSnoop_MaxCircuitIDs][kSnooper_circuit_id_len] = {
     kSnooper_ssid_index5,
     ksnooper_ssid_index6
 };
-
-typedef enum {
-    HOTSPOTFD_PRIMARY,
-    HOTSPOTFD_SECONDARY,
-    HOTSPOTFD_KEEPALIVE,
-    HOTSPOTFD_THRESHOLD,
-    HOTSPOTFD_MAXSECONDARY,
-    HOTSPOTFD_POLICY,
-    HOTSPOTFD_ENABLE,
-    HOTSPOTFD_COUNT,
-    HOTSPOTFD_LOGENABLE,
-    HOTSPOTFD_DEADINTERVAL,
-    HOTSPOTFD_WANSTATUS,
-    SNOOPER_ENABLE,
-    SNOOPER_DEBUGENABLE,
-    SNOOPER_LOGENABLE,
-    SNOOPER_CIRCUITENABLE,
-    SNOOPER_REMOTEENABLE,
-    SNOOPER_MAXCLIENTS,
-    HOTSPOTFD_CURRENT_WAN_IPADDR_V4,
-    HOTSPOTFD_CURRENT_WAN_IPADDR_V6,
-#ifdef WAN_FAILOVER_SUPPORTED
-    CURRENT_WAN_IFNAME,
-    TEST_CURRENT_WAN_IFNAME,
-#endif
-    HOTSPOTFD_ERROR
-}HotspotfdType;
 
 typedef struct
 {
@@ -315,7 +294,7 @@ HotspotfdType Get_HotspotfdType(char * name)
     return HOTSPOTFD_ERROR;
 }
 
-static bool set_tunnelstatus(char* status) {
+STATIC bool set_tunnelstatus(char* status) {
 
     CCSP_MESSAGE_BUS_INFO *bus_info = (CCSP_MESSAGE_BUS_INFO *)bus_handle;
     parameterValStruct_t  *param_val = NULL;
@@ -367,7 +346,7 @@ static bool set_tunnelstatus(char* status) {
     return TRUE;
 }
 
-static void notify_tunnel_status(char *status)
+STATIC void notify_tunnel_status(char *status)
 {
     int ret;
     if(set_tunnelstatus(status))
@@ -395,7 +374,7 @@ static void notify_tunnel_status(char *status)
     }
 }
 
-static bool set_validatessid() {
+STATIC bool set_validatessid() {
 
 #if defined(RDK_ONEWIFI)
 #if defined (_BWG_PRODUCT_REQ_) || defined (_CBR_PRODUCT_REQ_)
@@ -561,7 +540,7 @@ static bool set_validatessid() {
 
 
 
-static bool get_validate_ssid() 
+STATIC bool get_validate_ssid()
 {
     int ret = ANSC_STATUS_FAILURE;
     parameterValStruct_t    **valStructs = NULL;
@@ -633,9 +612,9 @@ static bool get_validate_ssid()
 }
 
 
-static bool hotspotfd_isClientAttached(bool *pIsNew)
+STATIC bool hotspotfd_isClientAttached(bool *pIsNew)
 {
-    static bool num_devices_0=0;
+    STATIC bool num_devices_0=0;
     if (gSnoopNumberOfClients > 0) { 
         if(pIsNew && num_devices_0==0) 
             *pIsNew=true;
@@ -657,7 +636,7 @@ static bool hotspotfd_isClientAttached(bool *pIsNew)
 /// \return - 0 = ping successful, 1 = ping not OK
 /// 
 ////////////////////////////////////////////////////////////////////////////////
-static unsigned short hotspotfd_checksum(void *pdata, int len)
+STATIC unsigned short hotspotfd_checksum(void *pdata, int len)
 {
     unsigned short *buf = pdata;
     unsigned int sum = 0;
@@ -686,7 +665,7 @@ static unsigned short hotspotfd_checksum(void *pdata, int len)
 /// \return - 0 = ping successful, 1 = ping not OK
 /// 
 ////////////////////////////////////////////////////////////////////////////////
-static int _hotspotfd_ping(char *address)
+STATIC int _hotspotfd_ping(char *address)
 {
     const int val = 255;
     int sd;
@@ -701,7 +680,7 @@ static int _hotspotfd_ping(char *address)
     int cnt = 1;
     int status = STATUS_FAILURE;
     struct ifreq ifr;
-    static int l_iPingCount = 0;
+    STATIC int l_iPingCount = 0;
     errno_t rc = -1;
     bool firstAttempt;
 
@@ -872,7 +851,7 @@ printf("------- ping >>\n");
     return status;
 }
 
-static int hotspotfd_ping(char *address, bool checkClient) {
+STATIC int hotspotfd_ping(char *address, bool checkClient) {
     //zqiu: do not ping WAG if no client attached, and no new client join in
 printf("------------------ %s \n", __func__); 
 #if !defined(_COSA_BCM_MIPS_)
@@ -894,7 +873,7 @@ printf("------------------ %s \n", __func__);
 #define kbrlan11_inst "11"
 #define kmultinet_Sync "multinet-syncMembers"
 
-static void hotspotfd_syncMultinet(void)
+STATIC void hotspotfd_syncMultinet(void)
 {
 	if (sysevent_set(sysevent_fd_gs, sysevent_token_gs, kmultinet_Sync, kbrlan2_inst, 0)) {
 		CcspTraceError(("sysevent set %s failed on brlan2\n", kmultinet_Sync));
@@ -917,7 +896,7 @@ static void hotspotfd_syncMultinet(void)
 }
 #endif
 
-static int hotspotfd_sleep(int sec, bool l_tunnelAlive) {
+STATIC int hotspotfd_sleep(int sec, bool l_tunnelAlive) {
 	bool isNew=false;	
 	time_t l_sRefTime, l_sNowTime;
 	struct tm * timeinfo;
@@ -958,7 +937,7 @@ static int hotspotfd_sleep(int sec, bool l_tunnelAlive) {
     return sec;
 }
 
-static void hotspotfd_SignalHandler(int signo)
+STATIC void hotspotfd_SignalHandler(int signo)
 {
     msg_debug("Received signal: %d\n", signo);
 
@@ -977,9 +956,9 @@ static void hotspotfd_SignalHandler(int signo)
     exit(0);
 }
 
-static void hotspotfd_log(void)
+STATIC void hotspotfd_log(void)
 {
-    static FILE *out;
+    STATIC FILE *out;
 	errno_t rc = -1;
 
     out = fopen(HOTSPOTFD_STATS_PATH, "w");
@@ -1045,7 +1024,7 @@ static void hotspotfd_log(void)
 
 }
 
-static bool hotspotfd_isValidIpAddress(char *ipAddress)
+STATIC bool hotspotfd_isValidIpAddress(char *ipAddress)
 {
     unsigned char buf[sizeof(struct in6_addr)];
     int result = inet_pton(AF_INET, ipAddress, buf) | inet_pton(AF_INET6, ipAddress, buf);
@@ -1053,7 +1032,7 @@ static bool hotspotfd_isValidIpAddress(char *ipAddress)
 }
 
 #ifdef WAN_FAILOVER_SUPPORTED
-static bool hotspot_isRemoteWan(char *wan_interface)
+STATIC bool hotspot_isRemoteWan(char *wan_interface)
 {
      char psm_val[128] = {0};
 
@@ -1092,7 +1071,7 @@ static bool hotspot_isRemoteWan(char *wan_interface)
      }
 }
 
-static bool hotspot_check_wan_failover_status(char *val)
+STATIC bool hotspot_check_wan_failover_status(char *val)
 {
      char cbuff[20]={0};
      bool isRemoteWANEnabled = false;
@@ -1127,7 +1106,7 @@ static bool hotspot_check_wan_failover_status(char *val)
 #endif
 
 #ifdef __HAVE_SYSEVENT__
-static void *hotspotfd_sysevent_handler(void *data)
+STATIC void *hotspotfd_sysevent_handler(void *data)
 {
     UNREFERENCED_PARAMETER(data);
     async_id_t hotspotfd_primary_id;
@@ -1490,7 +1469,7 @@ bool deleteSharedMem(int key, bool snooper)
 
     return true;
 }
-static int hotspotfd_setupSharedMemory(void)
+STATIC int hotspotfd_setupSharedMemory(void)
 {
     int status = STATUS_SUCCESS;
 
@@ -1577,7 +1556,7 @@ static int hotspotfd_setupSharedMemory(void)
 }
 
 #ifdef __HAVE_SYSEVENT_STARTUP_PARAMS__
-static int hotspotfd_getStartupParameters(void)
+STATIC int hotspotfd_getStartupParameters(void)
 {
     int status = STATUS_SUCCESS;
 	int i;
@@ -1900,7 +1879,7 @@ static int hotspotfd_getStartupParameters(void)
 
 #ifdef WAN_FAILOVER_SUPPORTED
 
-static void HotspotTunnelEventHandler(
+STATIC void HotspotTunnelEventHandler(
     rbusHandle_t handle,
     rbusEvent_t const* event,
     rbusEventSubscription_t* subscription)

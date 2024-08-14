@@ -1,8 +1,9 @@
+#!/bin/sh
 ##########################################################################
-# If not stated otherwise in this file or this component's LICENSE
+# If not stated otherwise in this file or this component's Licenses.txt
 # file the following copyright and licenses apply:
 #
-# Copyright 2018 RDK Management
+# Copyright 2015 RDK Management
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,4 +17,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = HotspotApiTest HotspotFdTest
+# Run this to generate all the initial makefiles, etc.
+#
+test -n "$srcdir" || srcdir=`dirname $0`
+test -n "$srcdir" || srcdir=.
+olddir=`pwd`
+cd $srcdir
+AUTORECONF=`which autoreconf`
+
+if test -z $AUTORECONF; then
+		echo '*** no autoreconf found. please install it ***'
+			exit 1
+			fi
+			autoreconf --force --install --verbose || exit $?
+			cd $olddir || exit $?
+			test -n "$NOCONFIGURE" || "$srcdir/configure" "$@"

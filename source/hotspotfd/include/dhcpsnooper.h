@@ -213,4 +213,6 @@ typedef struct
 void *dhcp_snooper_init(void *); 
 void updateRssiForClient(char* pRemote_id, int rssi);
 void snoop_RemoveClientListEntry(char *pRemote_id);
+uint16_t snoop_ipChecksum(struct iphdr * header);
+void snoop_log(void);
 #endif

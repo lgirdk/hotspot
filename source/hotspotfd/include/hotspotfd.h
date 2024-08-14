@@ -102,8 +102,52 @@ typedef struct
 
 }  hotspotfd_statistics_s;
 
+typedef enum {
+    HOTSPOTFD_PRIMARY,
+    HOTSPOTFD_SECONDARY,
+    HOTSPOTFD_KEEPALIVE,
+    HOTSPOTFD_THRESHOLD,
+    HOTSPOTFD_MAXSECONDARY,
+    HOTSPOTFD_POLICY,
+    HOTSPOTFD_ENABLE,
+    HOTSPOTFD_COUNT,
+    HOTSPOTFD_LOGENABLE,
+    HOTSPOTFD_DEADINTERVAL,
+    HOTSPOTFD_WANSTATUS,
+    SNOOPER_ENABLE,
+    SNOOPER_DEBUGENABLE,
+    SNOOPER_LOGENABLE,
+    SNOOPER_CIRCUITENABLE,
+    SNOOPER_REMOTEENABLE,
+    SNOOPER_MAXCLIENTS,
+    HOTSPOTFD_CURRENT_WAN_IPADDR_V4,
+    HOTSPOTFD_CURRENT_WAN_IPADDR_V6,
+#ifdef WAN_FAILOVER_SUPPORTED
+    CURRENT_WAN_IFNAME,
+    TEST_CURRENT_WAN_IFNAME,
+#endif
+    HOTSPOTFD_ERROR
+}HotspotfdType;
+
 #define kKeepAlive_Statistics           765889 // key used for shared memory
 #define kKeepAlive_SharedMemSize        sizeof(hotspotfd_statistics_s)
 
+HotspotfdType Get_HotspotfdType(char * name);
+bool deleteSharedMem(int key, bool snooper);
 void hotspot_start();
+
+#ifdef UNIT_TEST_DOCKER_SUPPORT
+bool set_tunnelstatus(char* status);
+void notify_tunnel_status(char *status);
+bool set_validatessid();
+bool get_validate_ssid();
+bool hotspotfd_isClientAttached(bool *pIsNew);
+unsigned short hotspotfd_checksum(void *pdata, int len);
+void hotspotfd_SignalHandler(int signo);
+void hotspotfd_log(void);
+bool hotspotfd_isValidIpAddress(char *ipAddress);
+int hotspotfd_setupSharedMemory(void);
+int hotspotfd_getStartupParameters(void);
+#endif
+
 #endif

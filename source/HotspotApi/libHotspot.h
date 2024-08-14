@@ -33,6 +33,7 @@
 #include <syscfg/syscfg.h>
 #include <sysevent/sysevent.h>
 #include <arpa/inet.h>
+#include <jansson.h>
 
 #include "libHotspotApi.h"
 
@@ -162,7 +163,9 @@ typedef enum {
 void firewall_restart();
 bool jansson_rollback_tunnel_info();
 int jansson_store_tunnel_info(tunneldoc_t *);
+bool checking_recovery_janson(json_t *json_tun_root);
 
+int gre_sysevent_syscfg_init();
 void configHotspotBridgeVlan(char *vapName, int wan_vlan);
 int  update_bridge_config (int index);
 int getHotspotVapIndex(char *vapName);
@@ -175,4 +178,7 @@ bool prevalidateHotspotBlob(tunneldoc_t *pGreTunnelData);
 int  validateIpAddress(char *ipAddress);
 int ipAddress_version(char *ipAddress);
 int prepareFirstRollback();
+int compareTunnelConfig();
+int PsmGet(const char *param, char *value, int size);
+int PsmSet(const char *param, const char *value);
 #endif
