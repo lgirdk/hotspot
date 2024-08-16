@@ -218,6 +218,43 @@ static int hotspot_sysevent_disable_param(){
     return 0;
 }
 
+#if defined (_XER5_PRODUCT_REQ_)
+static int is_wan_started(){
+  
+   char wan_status_Value[256] = {0};
+   if ( 0 == sysevent_get(gSyseventfd, gSysevent_token, "wan-status", wan_status_Value, sizeof(wan_status_Value)) && '\0' != wan_status_Value[0])
+   {
+        if (0 == strncmp(wan_status_Value, "started", strlen("started")))
+        {
+          return 1;
+        }
+   }
+   return 0;
+}
+
+static char *get_local_ipv4_address (char *buf, size_t len)
+{
+    
+
+    CcspTraceInfo(("HOTSPOT_LIB : Entering get_local_ipv4_address\n"));
+
+    if (len == 0)
+        return NULL;
+    if ( 0 == sysevent_get(gSyseventfd, gSysevent_token, "current_wan_ipaddr", buf, len) && '\0' != buf[0])
+    {
+       CcspTraceInfo(("HOTSPOT_LIB : Local ipv4 address = %s \n", buf));
+       return buf;
+    }
+    else 
+    {
+        CcspTraceWarning(("HOTSPOT_LIB : local wan interface has no Global IPv4 address\n"));
+        return NULL;
+    }
+
+    return NULL;
+}
+#endif
+
 static char *get_local_ipv6_address (char *buf, size_t len)
 {
     FILE *fp;
@@ -295,10 +332,36 @@ int create_tunnel(char *gre_primary_endpoint){
          ip_version = ipAddress_version(gre_primary_endpoint);
          CcspTraceInfo(("HOTSPOT_LIB : Creating IPv%d GRE tunnel\n", ip_version));
          if (ip_version == 4){
+#if defined (_XER5_PRODUCT_REQ_)
+            // XER5-1049 
+            // Qualcomm only support adding tunnel with local IP
+            char local_Ipv4Address[INET_ADDRSTRLEN] = {0};
+            int timeOut = 60;
+	    while(!is_wan_started() && timeOut > 0)
+            {
+              CcspTraceWarning(("HOTSPOT_LIB : Waiting %dsec for wan to start\n",timeOut));
+              sleep(1);
+              timeOut--;
+            }
+            if (get_local_ipv4_address(local_Ipv4Address, sizeof(local_Ipv4Address)) != NULL)
+            {
+                offset += snprintf(cmdBuf+offset,
+                              sizeof(cmdBuf) - offset,
+                              "%s %s type gretap local %s remote %s dev erouter0  dsfield b0 nopmtudisc;",
+                              IP_ADD, GRE_IFNAME, local_Ipv4Address, gre_primary_endpoint);
+            }
+            else
+            {
+                CcspTraceWarning(("HOTSPOT_LIB : Unable to create gretap0 interface since erouter0 doen't have global IPv4\n"));
+                 return -1;
+            }
+#else
+
              offset += snprintf(cmdBuf+offset,
                               sizeof(cmdBuf) - offset,
                               "%s %s type gretap remote %s dev erouter0  dsfield b0 nopmtudisc;",
                               IP_ADD, GRE_IFNAME, gre_primary_endpoint);
+#endif
          }else if (ip_version == 6){
              char local_Ipv6Address[INET6_ADDRSTRLEN];
              if (get_local_ipv6_address(local_Ipv6Address, sizeof(local_Ipv6Address)) != NULL)
